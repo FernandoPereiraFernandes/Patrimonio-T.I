@@ -1,0 +1,53 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// Ativo de TI (item de patrimônio/estoque)
+model Ativo {
+  id               String   @id @default(cuid())
+  numeroPatrimonio String   @unique // número de tombamento/patrimônio
+  numeroSerie      String?  // serial number do fabricante
+  categoria        String   // MONITOR, CPU, NOTEBOOK, TV, RACK, SERVIDOR, IMPRESSORA, IMPRESSORA_ZEBRA, SMARTPHONE, TELEFONE_FIXO
+  marca            String?
+  modelo           String?
+  descricao        String?
+  especificacoes   String?  // JSON livre com detalhes técnicos (RAM, CPU, polegadas, etc)
+  status           String   @default("EM_ESTOQUE") // EM_ESTOQUE, EM_USO, EM_MANUTENCAO, DESCARTADO
+  localizacao      String?  // sala/andar/setor físico
+  responsavel      String?  // pessoa responsável pelo uso
+  setor            String?  // departamento dono do ativo
+  dataAquisicao    DateTime?
+  valorAquisicao   Float?
+  fornecedor       String?
+  notaFiscal       String?
+  dataGarantia     DateTime?
+  observacoes      String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  movimentacoes Movimentacao[]
+}
+
+// Histórico de movimentações de um ativo
+model Movimentacao {
+  id                  String   @id @default(cuid())
+  ativoId             String
+  tipo                String   // ENTRADA_ESTOQUE, ATRIBUICAO, DEVOLUCAO, MANUTENCAO, DESCARTE, TRANSFERENCIA
+  descricao           String?
+  responsavelAnterior String?
+  responsavelNovo     String?
+  localizacaoAnterior String?
+  localizacaoNova     String?
+  data                DateTime @default(now())
+  usuario             String?  // quem registrou a movimentação
+
+  ativo Ativo @relation(fields: [ativoId], references: [id], onDelete: Cascade)
+}

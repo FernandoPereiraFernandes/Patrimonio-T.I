@@ -1,156 +1,162 @@
+#!/bin/bash
 # ============================================================
-# PatrimônioTI - Script de Instalação (Windows PowerShell)
+# PatrimônioTI - Script de Instalação Automatizada (Linux/macOS)
 # ============================================================
 # Uso:
-#   1. Abra o PowerShell como Administrador
-#   2. Execute: powershell -ExecutionPolicy Bypass -File .\scripts\install.ps1
+#   chmod +x scripts/install.sh
+#   ./scripts/install.sh
 #
 # Este script:
-#   1. Verifica pré-requisitos (Node.js)
+#   1. Verifica pré-requisitos (Node.js, npm/bun)
 #   2. Solicita dados do MariaDB
 #   3. Testa conexão
 #   4. Configura .env
 #   5. Instala dependências
 #   6. Cria as tabelas no banco
 #   7. Cria usuário admin inicial
+#   8. (Opcional) Inicia o sistema
 # ============================================================
 
-$ErrorActionPreference = "Stop"
+set -e
 
-function Write-Log($msg) { Write-Host "[$(Get-Date -Format 'HH:mm:ss')] $msg" -ForegroundColor Green }
-function Write-Warn($msg) { Write-Host "[AVISO] $msg" -ForegroundColor Yellow }
-function Write-Err($msg) { Write-Host "[ERRO] $msg" -ForegroundColor Red }
-function Write-Info($msg) { Write-Host "[INFO] $msg" -ForegroundColor Blue }
+# Cores
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m'
 
-Write-Host ""
-Write-Host "============================================================"
-Write-Host "  PatrimônioTI - Instalação Automatizada (Windows)"
-Write-Host "  Sistema de Controle de Estoque e Patrimônio de TI"
-Write-Host "============================================================"
-Write-Host ""
+log()   { echo -e "${GREEN}[$(date +%H:%M:%S)]${NC} $1"; }
+warn()  { echo -e "${YELLOW}[AVISO]${NC} $1"; }
+error() { echo -e "${RED}[ERRO]${NC} $1"; }
+info()  { echo -e "${BLUE}[INFO]${NC} $1"; }
+
+echo ""
+echo "============================================================"
+echo "  PatrimônioTI - Instalação Automatizada"
+echo "  Sistema de Controle de Estoque e Patrimônio de TI"
+echo "============================================================"
+echo ""
 
 # ===== Verificação de pré-requisitos =====
-Write-Log "Verificando pré-requisitos..."
+log "Verificando pré-requisitos..."
 
-if (!(Get-Command node -ErrorAction SilentlyContinue)) {
-    Write-Err "Node.js não encontrado. Instale a versão 18+ de https://nodejs.org"
+# Node.js
+if command -v node &> /dev/null; then
+    NODE_VERSION=$(node -v)
+    log "Node.js encontrado: $NODE_VERSION"
+else
+    error "Node.js não encontrado. Instale a versão 18+ de https://nodejs.org"
     exit 1
-}
-$nodeVersion = node -v
-Write-Log "Node.js encontrado: $nodeVersion"
+fi
 
-if (Get-Command bun -ErrorAction SilentlyContinue) {
-    $pkgMgr = "bun"
-    Write-Log "Bun encontrado - será usado para instalação."
-} elseif (Get-Command npm -ErrorAction SilentlyContinue) {
-    $pkgMgr = "npm"
-    Write-Log "npm encontrado - será usado para instalação."
-} else {
-    Write-Err "Nem bun nem npm encontrados. Instale um dos dois."
+# Bun (opcional) ou npm
+if command -v bun &> /dev/null; then
+    PKG_MGR="bun"
+    log "Bun encontrado - será usado para instalação."
+elif command -v npm &> /dev/null; then
+    PKG_MGR="npm"
+    log "npm encontrado - será usado para instalação."
+else
+    error "Nem bun nem npm encontrados. Instale um dos dois."
     exit 1
-}
+fi
 
-if (Get-Command mysql -ErrorAction SilentlyContinue) {
-    Write-Log "Cliente MySQL/MariaDB encontrado."
-} else {
-    Write-Warn "Cliente 'mysql' não encontrado no PATH. Recomendado para diagnóstico."
-}
+# MariaDB/MySQL client (opcional, mas recomendado)
+if command -v mysql &> /dev/null; then
+    log "Cliente MySQL/MariaDB encontrado."
+else
+    warn "Cliente 'mysql' não encontrado no PATH. Recomendado para diagnóstico."
+fi
 
-Write-Host ""
-Write-Log "Pré-requisitos OK!"
-Write-Host ""
+echo ""
+log "Pré-requisitos OK!"
+echo ""
 
 # ===== Coleta de dados do banco =====
-Write-Host "------------------------------------------------------------"
-Write-Host "  Configuração do Banco de Dados MariaDB/MySQL"
-Write-Host "------------------------------------------------------------"
-Write-Host ""
+echo "------------------------------------------------------------"
+echo "  Configuração do Banco de Dados MariaDB/MySQL"
+echo "------------------------------------------------------------"
+echo ""
 
-$DB_HOST = Read-Host "Host do MariaDB [localhost]"
-if (!$DB_HOST) { $DB_HOST = "localhost" }
+read -p "Host do MariaDB [localhost]: " DB_HOST
+DB_HOST=${DB_HOST:-localhost}
 
-$DB_PORT = Read-Host "Porta [3306]"
-if (!$DB_PORT) { $DB_PORT = "3306" }
+read -p "Porta [3306]: " DB_PORT
+DB_PORT=${DB_PORT:-3306}
 
-$DB_USER = Read-Host "Usuário do banco [root]"
-if (!$DB_USER) { $DB_USER = "root" }
+read -p "Usuário do banco [root]: " DB_USER
+DB_USER=${DB_USER:-root}
 
-$DB_PASSWORD = Read-Host "Senha do banco" -AsSecureString
-$DB_PASSWORDPlain = [Runtime.InteropServices.Marshal]::PtrToStringAuto(
-    [Runtime.InteropServices.Marshal]::SecureStringToBSTR($DB_PASSWORD)
-)
+read -s -p "Senha do banco: " DB_PASSWORD
+echo ""
 
-$DB_NAME = Read-Host "Nome do banco de dados [patrimonioti]"
-if (!$DB_NAME) { $DB_NAME = "patrimonioti" }
+read -p "Nome do banco de dados [patrimonioti]: " DB_NAME
+DB_NAME=${DB_NAME:-patrimonioti}
 
-$criarBanco = Read-Host "Criar o banco '$DB_NAME' se não existir? (s/N)"
-if ($criarBanco -eq "s" -or $criarBanco -eq "S") {
-    Write-Log "Criando banco '$DB_NAME'..."
-    $env:MYSQL_PWD = $DB_PASSWORDPlain
-    mysql -h $DB_HOST -P $DB_PORT -u $DB_USER -e "CREATE DATABASE IF NOT EXISTS \`$DB_NAME\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;" 2>$null
-    if ($LASTEXITCODE -eq 0) {
-        Write-Log "Banco criado/confirmado."
-    } else {
-        Write-Err "Falha ao criar banco. Verifique credenciais e permissões."
-        exit 1
-    }
-}
+echo ""
+read -p "Criar o banco '$DB_NAME' se não existir? (s/N): " CRIAR_BANCO
+CRIAR_BANCO=${CRIAR_BANCO:-n}
+
+if [[ "$CRIAR_BANCO" =~ ^[sS]$ ]]; then
+    log "Criando banco '$DB_NAME' se necessário..."
+    mysql -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -p"$DB_PASSWORD" -e \
+        "CREATE DATABASE IF NOT EXISTS \`$DB_NAME\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;" \
+        2>/dev/null && log "Banco criado/confirmado." || {
+            error "Falha ao criar banco. Verifique credenciais e permissões."
+            exit 1
+        }
+fi
 
 # Testar conexão
-Write-Log "Testando conexão com o banco..."
-$env:MYSQL_PWD = $DB_PASSWORDPlain
-mysql -h $DB_HOST -P $DB_PORT -u $DB_USER -e "USE \`$DB_NAME\`; SELECT 1;" 2>$null
-if ($LASTEXITCODE -eq 0) {
-    Write-Log "Conexão bem-sucedida!"
-} else {
-    Write-Err "Não foi possível conectar ao banco. Verifique as credenciais."
+log "Testando conexão com o banco..."
+if mysql -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -p"$DB_PASSWORD" -e "USE \`$DB_NAME\`; SELECT 1;" &>/dev/null; then
+    log "Conexão bem-sucedida!"
+else
+    error "Não foi possível conectar ao banco. Verifique as credenciais."
     exit 1
-}
+fi
 
-Write-Host ""
-Write-Host "------------------------------------------------------------"
-Write-Host "  Conta de Administrador"
-Write-Host "------------------------------------------------------------"
-Write-Host ""
+echo ""
+echo "------------------------------------------------------------"
+echo "  Conta de Administrador"
+echo "------------------------------------------------------------"
+echo ""
 
-$ADMIN_NOME = Read-Host "Nome do administrador"
-if (!$ADMIN_NOME) { $ADMIN_NOME = "Administrador" }
+read -p "Nome do administrador: " ADMIN_NOME
+ADMIN_NOME=${ADMIN_NOME:-Administrador}
 
-$ADMIN_EMAIL = Read-Host "E-mail do administrador"
-if (!$ADMIN_EMAIL) {
-    Write-Err "E-mail é obrigatório."
+read -p "E-mail do administrador: " ADMIN_EMAIL
+if [[ -z "$ADMIN_EMAIL" ]]; then
+    error "E-mail é obrigatório."
     exit 1
-}
+fi
 
-$ADMIN_PASSWORD = Read-Host "Senha do administrador (mínimo 6 caracteres)" -AsSecureString
-$ADMIN_PASSWORDPlain = [Runtime.InteropServices.Marshal]::PtrToStringAuto(
-    [Runtime.InteropServices.Marshal]::SecureStringToBSTR($ADMIN_PASSWORD)
-)
-if ($ADMIN_PASSWORDPlain.Length -lt 6) {
-    Write-Err "Senha muito curta."
+read -s -p "Senha do administrador (mínimo 6 caracteres): " ADMIN_PASSWORD
+echo ""
+if [[ ${#ADMIN_PASSWORD} -lt 6 ]]; then
+    error "Senha muito curta."
     exit 1
-}
+fi
 
-$ADMIN_PASSWORD_CONFIRM = Read-Host "Confirmar senha" -AsSecureString
-$ADMIN_PASSWORD_CONFIRMPlain = [Runtime.InteropServices.Marshal]::PtrToStringAuto(
-    [Runtime.InteropServices.Marshal]::SecureStringToBSTR($ADMIN_PASSWORD_CONFIRM)
-)
-if ($ADMIN_PASSWORDPlain -ne $ADMIN_PASSWORD_CONFIRMPlain) {
-    Write-Err "Senhas não conferem."
+read -s -p "Confirmar senha: " ADMIN_PASSWORD_CONFIRM
+echo ""
+if [[ "$ADMIN_PASSWORD" != "$ADMIN_PASSWORD_CONFIRM" ]]; then
+    error "Senhas não conferem."
     exit 1
-}
+fi
 
 # ===== Gerar NEXTAUTH_SECRET =====
-$NEXTAUTH_SECRET = -join ((1..64) | ForEach-Object { '{0:x}' -f (Get-Random -Max 16) })
+NEXTAUTH_SECRET=$(openssl rand -hex 32 2>/dev/null || node -e "console.log(require('crypto').randomBytes(32).toString('hex'))")
 
 # ===== Escrever .env =====
-Write-Log "Escrevendo arquivo .env..."
+log "Escrevendo arquivo .env..."
 
 # Escapar senha para URL
-$DB_PASSWORD_ENC = [uri]::EscapeDataString($DB_PASSWORDPlain)
+DB_PASSWORD_ENC=$(node -e "console.log(encodeURIComponent('$DB_PASSWORD'))")
 
-$envContent = @"
-# PatrimônioTI - Configuração gerada em $(Get-Date)
+cat > .env <<EOF
+# PatrimônioTI - Configuração gerada em $(date)
 # Banco de Dados (MariaDB/MySQL)
 DATABASE_URL="mysql://${DB_USER}:${DB_PASSWORD_ENC}@${DB_HOST}:${DB_PORT}/${DB_NAME}"
 
@@ -160,89 +166,76 @@ NEXTAUTH_URL="http://localhost:3000"
 
 # Aplicação
 NODE_ENV="production"
-"@
+EOF
 
-Set-Content -Path ".env" -Value $envContent -Encoding UTF8
-Write-Log "Arquivo .env criado."
+log "Arquivo .env criado."
 
 # ===== Trocar schema para MySQL =====
-Write-Log "Trocando schema Prisma para MySQL..."
-if (Test-Path "prisma\schema.mysql.prisma") {
-    if (Test-Path "prisma\schema.prisma") {
-        Copy-Item "prisma\schema.prisma" "prisma\schema.sqlite.bak.prisma" -Force
-    }
-    Copy-Item "prisma\schema.mysql.prisma" "prisma\schema.prisma" -Force
-    Write-Log "Schema MySQL ativado."
-} else {
-    Write-Err "Arquivo prisma\schema.mysql.prisma não encontrado."
+log "Trocando schema Prisma para MySQL..."
+if [ -f "prisma/schema.mysql.prisma" ]; then
+    cp prisma/schema.prisma prisma/schema.sqlite.bak.prisma 2>/dev/null || true
+    cp prisma/schema.mysql.prisma prisma/schema.prisma
+    log "Schema MySQL ativado."
+else
+    error "Arquivo prisma/schema.mysql.prisma não encontrado."
     exit 1
-}
+fi
 
 # ===== Instalar dependências =====
-Write-Log "Instalando dependências..."
-if ($pkgMgr -eq "bun") {
+log "Instalando dependências..."
+if [ "$PKG_MGR" = "bun" ]; then
     bun install
-} else {
+else
     npm install
-}
+fi
 
 # ===== Gerar Prisma Client =====
-Write-Log "Gerando Prisma Client..."
-if ($pkgMgr -eq "bun") {
-    bun run db:generate
-} else {
-    npm run db:generate
-}
+log "Gerando Prisma Client..."
+$PKG_MGR run db:generate || npx prisma generate
 
 # ===== Criar tabelas =====
-Write-Log "Criando tabelas no banco de dados..."
-if ($pkgMgr -eq "bun") {
-    bun run db:push --accept-data-loss
-} else {
-    npx prisma db push --accept-data-loss
-}
+log "Criando tabelas no banco de dados..."
+$PKG_MGR run db:push --accept-data-loss || npx prisma db push --accept-data-loss
 
 # ===== Criar admin =====
-Write-Log "Criando usuário administrador..."
+log "Criando usuário administrador..."
 
-$hashScript = @"
+HASH=$(node -e "
 const bcrypt = require('bcryptjs');
-const hash = bcrypt.hashSync('$ADMIN_PASSWORDPlain', 10);
+const hash = bcrypt.hashSync('$ADMIN_PASSWORD', 10);
 console.log(hash);
-"@
-$HASH = $hashScript | node 2>$null
+" 2>/dev/null)
 
-if ($HASH) {
-    $env:MYSQL_PWD = $DB_PASSWORDPlain
-    $insertSQL = "INSERT INTO User (id, nome, email, senha, role, ativo, createdAt, updatedAt) VALUES (LOWER(REPLACE(UUID(),'-','')), '$ADMIN_NOME', LOWER('$ADMIN_EMAIL'), '$HASH', 'ADMIN', 1, NOW(), NOW());"
-    mysql -h $DB_HOST -P $DB_PORT -u $DB_USER $DB_NAME -e $insertSQL 2>$null
-    if ($LASTEXITCODE -eq 0) {
-        Write-Log "Administrador criado: $ADMIN_EMAIL"
-    } else {
-        Write-Warn "Falha ao criar admin. Use a interface web em /install."
-    }
-} else {
-    Write-Warn "Não foi possível gerar hash. Use a interface web em /install."
-}
+if [ -z "$HASH" ]; then
+    warn "Não foi possível gerar hash via node. Tentando via mysql..."
+    warn "Pule a criação do admin e use a interface web em /install."
+else
+    mysql -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -p"$DB_PASSWORD" "$DB_NAME" -e \
+        "INSERT INTO User (id, nome, email, senha, role, ativo, createdAt, updatedAt) VALUES (LOWER(REPLACE(UUID(),'-','')), '$ADMIN_NOME', LOWER('$ADMIN_EMAIL'), '$HASH', 'ADMIN', 1, NOW(), NOW());" \
+        2>/dev/null && log "Administrador criado: $ADMIN_EMAIL" || warn "Falha ao criar admin (talvez já exista). Use a interface web."
+fi
 
 # ===== Concluído =====
-Write-Host ""
-Write-Host "============================================================"
-Write-Host "  INSTALAÇÃO CONCLUÍDA COM SUCESSO!" -ForegroundColor Green
-Write-Host "============================================================"
-Write-Host ""
-Write-Host "  Banco de dados: ${DB_HOST}:${DB_PORT}/${DB_NAME}"
-Write-Host "  Administrador:  ${ADMIN_EMAIL}"
-Write-Host "  Perfil:         ADMIN (acesso total)"
-Write-Host ""
-Write-Host "  Para iniciar o sistema:"
-if ($pkgMgr -eq "bun") {
-    Write-Host "    bun run build"
-    Write-Host "    bun run start"
-} else {
-    Write-Host "    npm run build"
-    Write-Host "    npm run start"
-}
-Write-Host ""
-Write-Host "  Acesse: http://localhost:3000"
-Write-Host ""
+echo ""
+echo "============================================================"
+echo -e "${GREEN}  INSTALAÇÃO CONCLUÍDA COM SUCESSO!${NC}"
+echo "============================================================"
+echo ""
+echo "  Banco de dados: ${DB_HOST}:${DB_PORT}/${DB_NAME}"
+echo "  Administrador:  ${ADMIN_EMAIL}"
+echo "  Perfil:         ADMIN (acesso total)"
+echo ""
+echo "  Para iniciar o sistema:"
+if [ "$PKG_MGR" = "bun" ]; then
+    echo "    bun run build && bun run start"
+else
+    echo "    npm run build && npm run start"
+fi
+echo ""
+echo "  Acesse: http://localhost:3000"
+echo ""
+echo "  Em produção, considere:"
+echo "    - Configurar HTTPS (reverse proxy com Nginx/Caddy)"
+echo "    - Alterar NEXTAUTH_URL no .env para a URL pública"
+echo "    - Configurar systemd ou PM2 para manter o serviço ativo"
+echo ""

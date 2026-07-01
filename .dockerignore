@@ -1,0 +1,20 @@
+# Arquivos e diretórios que NÃO devem ir para a imagem Docker
+node_modules
+.next
+.git
+.gitignore
+*.md
+.env
+.env.*
+!.env.example
+dev.log
+server.log
+dev-run.log
+db/
+download/
+examples/
+.vscode
+.idea
+*.bak
+prisma/schema.sqlite.bak.prisma
+start-dev.sh

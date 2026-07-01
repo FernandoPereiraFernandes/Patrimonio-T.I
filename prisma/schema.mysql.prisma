@@ -1,0 +1,77 @@
+// Schema para PRODUÇÃO usando MySQL/MariaDB
+// Este arquivo é usado pelo instalador web e pelos scripts de deploy.
+// Em desenvolvimento, o schema.prisma (SQLite) é utilizado.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// Usuário do sistema (login)
+model User {
+  id        String   @id @default(cuid())
+  nome      String   @db.VarChar(150)
+  email     String   @unique @db.VarChar(150)
+  senha     String   @db.VarChar(255)
+  role      String   @default("USUARIO") @db.VarChar(20) // ADMIN, TECNICO, USUARIO
+  ativo     Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([email])
+}
+
+// Ativo de TI (item de patrimônio/estoque)
+model Ativo {
+  id               String   @id @default(cuid())
+  numeroPatrimonio String   @unique @db.VarChar(80)
+  numeroSerie      String?  @db.VarChar(150)
+  categoria        String   @db.VarChar(40) // MONITOR, CPU, NOTEBOOK, TV, RACK, SERVIDOR, IMPRESSORA, IMPRESSORA_ZEBRA, SMARTPHONE, TELEFONE_FIXO
+  marca            String?  @db.VarChar(100)
+  modelo           String?  @db.VarChar(150)
+  descricao        String?  @db.Text
+  especificacoes   String?  @db.Text // JSON livre com detalhes técnicos
+  status           String   @default("EM_ESTOQUE") @db.VarChar(20)
+  localizacao      String?  @db.VarChar(150)
+  responsavel      String?  @db.VarChar(150)
+  setor            String?  @db.VarChar(100)
+  dataAquisicao    DateTime?
+  valorAquisicao   Float?
+  fornecedor       String?  @db.VarChar(150)
+  notaFiscal       String?  @db.VarChar(80)
+  dataGarantia     DateTime?
+  observacoes      String?  @db.Text
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  movimentacoes Movimentacao[]
+
+  @@index([categoria])
+  @@index([status])
+  @@index([responsavel])
+  @@index([setor])
+}
+
+// Histórico de movimentações de um ativo
+model Movimentacao {
+  id                  String   @id @default(cuid())
+  ativoId             String
+  tipo                String   @db.VarChar(30)
+  descricao           String?  @db.Text
+  responsavelAnterior String?  @db.VarChar(150)
+  responsavelNovo     String?  @db.VarChar(150)
+  localizacaoAnterior String?  @db.VarChar(150)
+  localizacaoNova     String?  @db.VarChar(150)
+  data                DateTime @default(now())
+  usuario             String?  @db.VarChar(150)
+
+  ativo Ativo @relation(fields: [ativoId], references: [id], onDelete: Cascade)
+
+  @@index([ativoId])
+  @@index([tipo])
+  @@index([data])
+}

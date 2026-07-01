@@ -1,9 +1,23 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
 import type { AtivoInput } from "@/lib/types";
 
+// Helper de auth compartilhado
+async function requireAuth() {
+  const session = await getServerSession(authOptions);
+  if (!session?.user) return null;
+  return session;
+}
+
 // GET /api/ativos - lista com filtros
 export async function GET(req: NextRequest) {
+  const session = await requireAuth();
+  if (!session) {
+    return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
+  }
+
   try {
     const { searchParams } = new URL(req.url);
     const categoria = searchParams.get("categoria") || undefined;
@@ -47,8 +61,19 @@ export async function GET(req: NextRequest) {
   }
 }
 
-// POST /api/ativos - cria novo ativo
+// POST /api/ativos - cria novo ativo (ADMIN ou TECNICO)
 export async function POST(req: NextRequest) {
+  const session = await requireAuth();
+  if (!session) {
+    return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
+  }
+  if (session.user.role === "USUARIO") {
+    return NextResponse.json(
+      { error: "Sem permissão para criar ativos" },
+      { status: 403 }
+    );
+  }
+
   try {
     const body = (await req.json()) as AtivoInput;
 
@@ -99,7 +124,7 @@ export async function POST(req: NextRequest) {
         tipo: "ENTRADA_ESTOQUE",
         descricao: `Entrada do ativo no patrimônio. NF: ${data.notaFiscal ?? "N/A"}`,
         localizacaoNova: data.localizacao || "Almoxarifado Ti",
-        usuario: body.responsavel || "Sistema",
+        usuario: session.user.name,
       },
     });
 
@@ -112,7 +137,7 @@ export async function POST(req: NextRequest) {
           descricao: `Atribuído a ${ativo.responsavel}`,
           responsavelNovo: ativo.responsavel,
           localizacaoNova: ativo.localizacao,
-          usuario: body.responsavel || "Sistema",
+          usuario: session.user.name,
         },
       });
     }

@@ -1,9 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
 import type { MovimentacaoInput } from "@/lib/types";
 
 // GET /api/movimentacoes - lista com filtros
 export async function GET(req: NextRequest) {
+  const session = await getServerSession(authOptions);
+  if (!session?.user) {
+    return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
+  }
+
   try {
     const { searchParams } = new URL(req.url);
     const ativoId = searchParams.get("ativoId") || undefined;
@@ -31,8 +38,19 @@ export async function GET(req: NextRequest) {
   }
 }
 
-// POST /api/movimentacoes - registra nova movimentação e atualiza ativo
+// POST /api/movimentacoes - registra nova movimentação (ADMIN ou TECNICO)
 export async function POST(req: NextRequest) {
+  const session = await getServerSession(authOptions);
+  if (!session?.user) {
+    return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
+  }
+  if (session.user.role === "USUARIO") {
+    return NextResponse.json(
+      { error: "Sem permissão para registrar movimentações" },
+      { status: 403 }
+    );
+  }
+
   try {
     const body = (await req.json()) as MovimentacaoInput;
 
@@ -100,7 +118,7 @@ export async function POST(req: NextRequest) {
           responsavelNovo: novoResponsavel,
           localizacaoAnterior,
           localizacaoNova: novaLocalizacao,
-          usuario: body.usuario || "Sistema",
+          usuario: body.usuario || session.user.name,
         },
       }),
       db.ativo.update({

@@ -10,6 +10,18 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// Usuário do sistema (login)
+model User {
+  id        String   @id @default(cuid())
+  nome      String
+  email     String   @unique
+  senha     String
+  role      String   @default("USUARIO") // ADMIN, TECNICO, USUARIO
+  ativo     Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
 // Ativo de TI (item de patrimônio/estoque)
 model Ativo {
   id               String   @id @default(cuid())

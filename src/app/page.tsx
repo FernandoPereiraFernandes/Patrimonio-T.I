@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useSession } from "next-auth/react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { CategoryIcon } from "@/components/patrimonio/category-icon";
@@ -9,6 +10,7 @@ import { AssetList } from "@/components/patrimonio/asset-list";
 import { MovementsView } from "@/components/patrimonio/movements-view";
 import { ReportsView } from "@/components/patrimonio/reports-view";
 import { ThemeToggle } from "@/components/patrimonio/theme-toggle";
+import { UserMenu } from "@/components/patrimonio/user-menu";
 import { cn } from "@/lib/utils";
 import {
   LayoutDashboard,
@@ -17,27 +19,34 @@ import {
   BarChart3,
   Menu,
   ServerCog,
-  Github,
+  Users,
   Heart,
+  ShieldCheck,
 } from "lucide-react";
 
-type View = "dashboard" | "patrimonio" | "movimentacoes" | "relatorios";
-
-const NAV: { value: View; label: string; icon: React.ElementType; desc: string }[] = [
-  { value: "dashboard", label: "Painel", icon: LayoutDashboard, desc: "Visão geral" },
-  { value: "patrimonio", label: "Patrimônio", icon: Boxes, desc: "Ativos cadastrados" },
-  { value: "movimentacoes", label: "Movimentações", icon: History, desc: "Histórico" },
-  { value: "relatorios", label: "Relatórios", icon: BarChart3, desc: "Análises" },
-];
+type View = "dashboard" | "patrimonio" | "movimentacoes" | "relatorios" | "usuarios";
 
 export default function Home() {
+  const { data: session } = useSession();
   const [view, setView] = useState<View>("dashboard");
   const [mobileOpen, setMobileOpen] = useState(false);
+
+  const isAdmin = session?.user?.role === "ADMIN";
 
   const navegar = (v: string) => {
     setView(v as View);
     setMobileOpen(false);
   };
+
+  const NAV: { value: View; label: string; icon: React.ElementType; desc: string; adminOnly?: boolean }[] = [
+    { value: "dashboard", label: "Painel", icon: LayoutDashboard, desc: "Visão geral" },
+    { value: "patrimonio", label: "Patrimônio", icon: Boxes, desc: "Ativos cadastrados" },
+    { value: "movimentacoes", label: "Movimentações", icon: History, desc: "Histórico" },
+    { value: "relatorios", label: "Relatórios", icon: BarChart3, desc: "Análises" },
+    { value: "usuarios", label: "Usuários", icon: Users, desc: "Gerenciar acessos", adminOnly: true },
+  ];
+
+  const navItems = NAV.filter((n) => !n.adminOnly || isAdmin);
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
@@ -60,6 +69,8 @@ export default function Home() {
               <SidebarContent
                 view={view}
                 onNavigate={navegar}
+                navItems={navItems}
+                isAdmin={isAdmin}
               />
             </SheetContent>
           </Sheet>
@@ -80,11 +91,18 @@ export default function Home() {
           </div>
 
           <div className="ml-auto flex items-center gap-2">
-            <span className="hidden md:inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
-              <span className="size-1.5 rounded-full bg-primary animate-pulse" />
-              Setor de TI
-            </span>
+            {session?.user && (
+              <span className="hidden md:inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
+                <ShieldCheck className="size-3" />
+                {session.user.role === "ADMIN"
+                  ? "Administrador"
+                  : session.user.role === "TECNICO"
+                  ? "Técnico"
+                  : "Usuário"}
+              </span>
+            )}
             <ThemeToggle />
+            <UserMenu />
           </div>
         </div>
       </header>
@@ -93,7 +111,12 @@ export default function Home() {
       <div className="flex flex-1">
         {/* Sidebar desktop */}
         <aside className="hidden lg:flex w-60 shrink-0 flex-col border-r bg-sidebar">
-          <SidebarContent view={view} onNavigate={navegar} />
+          <SidebarContent
+            view={view}
+            onNavigate={navegar}
+            navItems={navItems}
+            isAdmin={isAdmin}
+          />
         </aside>
 
         {/* Conteúdo principal */}
@@ -103,6 +126,7 @@ export default function Home() {
             {view === "patrimonio" && <AssetList />}
             {view === "movimentacoes" && <MovementsView />}
             {view === "relatorios" && <ReportsView />}
+            {view === "usuarios" && isAdmin && <UsersPageLazy />}
           </div>
         </main>
       </div>
@@ -125,12 +149,23 @@ export default function Home() {
   );
 }
 
+// Lazy import para evitar carregar usuários se não for admin
+import dynamic from "next/dynamic";
+const UsersPageLazy = dynamic(
+  () => import("@/app/usuarios/page").then((m) => m.default),
+  { ssr: false }
+);
+
 function SidebarContent({
   view,
   onNavigate,
+  navItems,
+  isAdmin,
 }: {
   view: string;
   onNavigate: (v: string) => void;
+  navItems: { value: string; label: string; icon: React.ElementType; desc: string; adminOnly?: boolean }[];
+  isAdmin: boolean;
 }) {
   return (
     <div className="flex h-full flex-col">
@@ -153,7 +188,7 @@ function SidebarContent({
         <p className="px-3 pt-2 pb-1 text-xs font-semibold uppercase tracking-wider text-sidebar-foreground/50">
           Menu
         </p>
-        {NAV.map((item) => {
+        {navItems.map((item) => {
           const active = view === item.value;
           return (
             <button
@@ -219,7 +254,9 @@ function SidebarContent({
                 className="size-3.5 shrink-0 opacity-70"
               />
               <span className="truncate">
-                {cat === "IMPRESSORA_ZEBRA" ? "Zebra" : cat.charAt(0) + cat.slice(1).toLowerCase()}
+                {cat === "IMPRESSORA_ZEBRA"
+                  ? "Zebra"
+                  : cat.charAt(0) + cat.slice(1).toLowerCase()}
               </span>
             </button>
           ))}
@@ -227,13 +264,10 @@ function SidebarContent({
       </div>
 
       <div className="p-3 border-t border-sidebar-border">
-        <a
-          href="#"
-          className="flex items-center gap-2 rounded-lg px-3 py-2 text-xs text-sidebar-foreground/50 hover:text-sidebar-foreground transition-colors"
-        >
-          <Github className="size-3.5" />
+        <span className="flex items-center gap-2 rounded-lg px-3 py-2 text-xs text-sidebar-foreground/50">
+          <ShieldCheck className="size-3.5" />
           v1.0.0 · Build TI
-        </a>
+        </span>
       </div>
     </div>
   );

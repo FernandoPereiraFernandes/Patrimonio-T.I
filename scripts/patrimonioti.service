@@ -1,0 +1,59 @@
+# ============================================================
+# PatrimônioTI - Systemd Service File (Linux)
+# ============================================================
+# Instalação:
+#   1. Build: cd /opt/patrimonioti && bun run build
+#   2. Copie este arquivo: sudo cp scripts/patrimonioti.service /etc/systemd/system/
+#   3. Edite os caminhos conforme sua instalação
+#   4. Recarregue systemd: sudo systemctl daemon-reload
+#   5. Habilite e inicie: sudo systemctl enable --now patrimonioti
+#   6. Verifique status: sudo systemctl status patrimonioti
+#   7. Logs: sudo journalctl -u patrimonioti -f
+# ============================================================
+
+[Unit]
+Description=PatrimônioTI - Sistema de Controle de Estoque e Patrimônio de TI
+Documentation=https://github.com/your-org/patrimonioti
+After=network.target mariadb.service mysql.service
+Wants=mariadb.service
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+
+# Diretório de instalação (ajuste conforme seu servidor)
+WorkingDirectory=/opt/patrimonioti
+
+# Caminho do Node/Bun (ajuste conforme instalação)
+# Para Bun:
+ExecStart=/home/usuario/.bun/bin/bun run start
+# Para Node.js:
+# ExecStart=/usr/bin/node /opt/patrimonioti/.next/standalone/server.js
+
+# Variáveis de ambiente (ou use arquivo .env)
+EnvironmentFile=/opt/patrimonioti/.env
+Environment=NODE_ENV=production
+Environment=PORT=3000
+Environment=HOSTNAME=0.0.0.0
+
+# Reiniciar em caso de falha
+Restart=always
+RestartSec=5
+
+# Logs
+StandardOutput=journal
+StandardError=journal
+SysIdentifier=patrimonioti
+
+# Limites
+LimitNOFILE=65536
+
+# Segurança
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target

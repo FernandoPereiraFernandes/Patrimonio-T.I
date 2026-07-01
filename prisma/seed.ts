@@ -1,9 +1,39 @@
 import { db } from "../src/lib/db";
+import bcrypt from "bcryptjs";
 
 async function main() {
   // Limpar dados antigos
   await db.movimentacao.deleteMany();
   await db.ativo.deleteMany();
+  await db.user.deleteMany();
+
+  // ===== Criar usuários padrão =====
+  const senhaAdmin = await bcrypt.hash("admin123", 10);
+  const senhaTec = await bcrypt.hash("tecnico123", 10);
+
+  const admin = await db.user.create({
+    data: {
+      nome: "Administrador do Sistema",
+      email: "admin@patrimonio.ti",
+      senha: senhaAdmin,
+      role: "ADMIN",
+      ativo: true,
+    },
+  });
+
+  const tecnico = await db.user.create({
+    data: {
+      nome: "Roberto Mendes",
+      email: "roberto.mendes@patrimonio.ti",
+      senha: senhaTec,
+      role: "TECNICO",
+      ativo: true,
+    },
+  });
+
+  console.log(`✅ Usuários criados:
+   - ${admin.email} (ADMIN) senha: admin123
+   - ${tecnico.email} (TECNICO) senha: tecnico123`);
 
   const now = new Date();
   const diasAtras = (d: number) => {
@@ -39,7 +69,7 @@ async function main() {
       numeroPatrimonio: "TI-MON-0003", numeroSerie: "SN-SAMSUNG-S24R-003", categoria: "MONITOR",
       marca: "Samsung", modelo: "S24R350", status: "EM_ESTOQUE",
       especificacoes: JSON.stringify({ Polegadas: "24", Resolução: "1920x1080", "Tipo de painel": "IPS" }),
-      localizacao: "Almoxarifado TI", responsavel: null, setor: "TI",
+      localizacao: "Almoxarifado Ti", responsavel: null, setor: "TI",
       dataAquisicao: diasAtras(30), valorAquisicao: 1200, fornecedor: "Dell Brasil", notaFiscal: "NF-30998",
       dataGarantia: anosAtras(-3), observacoes: "Reserva técnica",
     },
@@ -284,7 +314,6 @@ async function main() {
   for (const ativo of ativos) {
     const created = await db.ativo.create({ data: ativo });
 
-    // Criar movimentação de entrada em estoque para todos
     await db.movimentacao.create({
       data: {
         ativoId: created.id,
@@ -296,7 +325,6 @@ async function main() {
       },
     });
 
-    // Se está em uso, criar movimentação de atribuição
     if (ativo.status === "EM_USO" && ativo.responsavel) {
       await db.movimentacao.create({
         data: {
@@ -311,7 +339,6 @@ async function main() {
       });
     }
 
-    // Se está em manutenção, criar movimentação
     if (ativo.status === "EM_MANUTENCAO") {
       await db.movimentacao.create({
         data: {

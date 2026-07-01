@@ -22,6 +22,20 @@ model User {
   updatedAt DateTime @updatedAt
 }
 
+// Categoria dinâmica (admin pode adicionar novas além das 10 built-in)
+model Categoria {
+  id            String   @id @default(cuid())
+  value         String   @unique // chave usada no Ativo.categoria (ex: MONITOR, NOVA_CAT)
+  label         String   // nome exibido no plural (ex: "Monitores")
+  labelSingular String   // nome no singular (ex: "Monitor")
+  icon          String   @default("Package") // nome do ícone Lucide
+  campos        String   @default("[]") // JSON: lista de campos específicos
+  builtin       Boolean  @default(false) // true para as 10 categorias padrão do sistema
+  ativa         Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
 // Ativo de TI (item de patrimônio/estoque)
 model Ativo {
   id               String   @id @default(cuid())

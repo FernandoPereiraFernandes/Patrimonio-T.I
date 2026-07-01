@@ -20,11 +20,12 @@ import {
   Menu,
   ServerCog,
   Users,
+  Tags,
   Heart,
   ShieldCheck,
 } from "lucide-react";
 
-type View = "dashboard" | "patrimonio" | "movimentacoes" | "relatorios" | "usuarios";
+type View = "dashboard" | "patrimonio" | "movimentacoes" | "relatorios" | "usuarios" | "categorias";
 
 export default function Home() {
   const { data: session } = useSession();
@@ -44,6 +45,7 @@ export default function Home() {
     { value: "movimentacoes", label: "Movimentações", icon: History, desc: "Histórico" },
     { value: "relatorios", label: "Relatórios", icon: BarChart3, desc: "Análises" },
     { value: "usuarios", label: "Usuários", icon: Users, desc: "Gerenciar acessos", adminOnly: true },
+    { value: "categorias", label: "Categorias", icon: Tags, desc: "Tipos de ativos", adminOnly: true },
   ];
 
   const navItems = NAV.filter((n) => !n.adminOnly || isAdmin);
@@ -127,6 +129,7 @@ export default function Home() {
             {view === "movimentacoes" && <MovementsView />}
             {view === "relatorios" && <ReportsView />}
             {view === "usuarios" && isAdmin && <UsersPageLazy />}
+            {view === "categorias" && isAdmin && <CategoriasPageLazy />}
           </div>
         </main>
       </div>
@@ -153,6 +156,10 @@ export default function Home() {
 import dynamic from "next/dynamic";
 const UsersPageLazy = dynamic(
   () => import("@/app/usuarios/page").then((m) => m.default),
+  { ssr: false }
+);
+const CategoriasPageLazy = dynamic(
+  () => import("@/app/categorias/page").then((m) => m.default),
   { ssr: false }
 );
 

@@ -24,13 +24,14 @@ import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { toast } from "sonner";
 import {
-  CATEGORIAS,
   STATUS,
   type CategoriaAtivo,
   type StatusAtivo,
 } from "@/lib/constants";
+import { useCategorias } from "@/lib/categorias";
 import { useCreateAtivo, useUpdateAtivo } from "@/lib/queries";
 import type { Ativo, AtivoInput } from "@/lib/types";
+import { CategoryIcon } from "@/components/patrimonio/category-icon";
 import { Loader2, Save, X } from "lucide-react";
 
 interface AssetFormDialogProps {
@@ -144,12 +145,14 @@ function AssetFormInner({
 
   const createMut = useCreateAtivo();
   const updateMut = useUpdateAtivo();
+  const { data: categorias } = useCategorias();
 
-  const categoriaInfo = CATEGORIAS.find((c) => c.value === form.categoria);
+  const categoriaInfo = categorias?.find((c) => c.value === form.categoria);
+  const camposCategoria = categoriaInfo?.campos ?? [];
 
   // Garantir que os campos de specs têm todos os campos da categoria atual
   const specsAtuais: Record<string, string> = {};
-  categoriaInfo?.campos.forEach((campo) => {
+  camposCategoria.forEach((campo) => {
     specsAtuais[campo] = specs[campo] ?? "";
   });
 
@@ -261,9 +264,16 @@ function AssetFormInner({
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {CATEGORIAS.map((c) => (
+                    {(categorias ?? []).map((c) => (
                       <SelectItem key={c.value} value={c.value}>
-                        {c.labelSingular}
+                        <span className="flex items-center gap-2">
+                          <CategoryIcon
+                            categoria={c.value}
+                            iconName={c.icon}
+                            className="size-4"
+                          />
+                          {c.labelSingular}
+                        </span>
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -319,11 +329,11 @@ function AssetFormInner({
           {/* Seção 2: Especificações técnicas */}
           <section className="space-y-4">
             <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
-              Especificações Técnicas · {categoriaInfo?.labelSingular}
+              Especificações Técnicas · {categoriaInfo?.labelSingular ?? form.categoria}
             </h3>
-            {categoriaInfo && categoriaInfo.campos.length > 0 ? (
+            {camposCategoria.length > 0 ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {categoriaInfo.campos.map((campo) => (
+                {camposCategoria.map((campo) => (
                   <div key={campo} className="space-y-1.5">
                     <Label htmlFor={`spec-${campo}`}>{campo}</Label>
                     <Input
@@ -339,7 +349,9 @@ function AssetFormInner({
               </div>
             ) : (
               <p className="text-sm text-muted-foreground">
-                Sem campos específicos para esta categoria.
+                Sem campos específicos para esta categoria.{" "}
+                {categoriaInfo?.builtin === false &&
+                  "Você pode adicionar campos editando a categoria em Configurações > Categorias."}
               </p>
             )}
             <div className="space-y-1.5">

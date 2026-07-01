@@ -25,6 +25,20 @@ model User {
   @@index([email])
 }
 
+// Categoria dinâmica (admin pode adicionar novas além das 10 built-in)
+model Categoria {
+  id            String   @id @default(cuid())
+  value         String   @unique @db.VarChar(40)
+  label         String   @db.VarChar(80)
+  labelSingular String   @db.VarChar(80)
+  icon          String   @default("Package") @db.VarChar(50)
+  campos        String   @default("[]") @db.Text // JSON
+  builtin       Boolean  @default(false)
+  ativa         Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
 // Ativo de TI (item de patrimônio/estoque)
 model Ativo {
   id               String   @id @default(cuid())

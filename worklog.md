@@ -51,3 +51,35 @@ Stage Summary:
 - Ambiente dev (SQLite) preservado para preview
 - Ambiente prod (MariaDB) pronto via schema.mysql.prisma
 - Validado via Agent Browser: login, dashboard, usuários, logout - tudo funcionando
+
+---
+Task ID: 3
+Agent: main
+Task: Corrigir erro CLIENT_FETCH_ERROR do NextAuth + adicionar registro de usuários + categorias dinâmicas
+
+Work Log:
+- Reformulado proxy.ts (middleware Next.js 16): removido conflito com next-auth/middleware, usando getToken direto do next-auth/jwt
+- Adicionadas rotas públicas no proxy: /login, /registro, /install, /api/auth, /api/install, /api/setup-first-admin, /api/registro, /api/categorias/public
+- Corrigida página /login: envolvido useSearchParams em Suspense boundary (necessário no Next.js 16)
+- Adicionado botão "Criar nova conta" na página de login (link para /registro)
+- Criada página /registro com formulário completo (nome, email, senha, confirmação)
+- Criada API /api/registro (POST público) - sempre cria com role USUARIO
+- Criada página /categorias (admin only) para gerenciar categorias dinâmicas
+- Adicionado model Categoria no Prisma (SQLite + MySQL)
+- Criado seed-categorias.ts que popula as 10 categorias padrão como builtin=true
+- Criadas APIs: /api/categorias (GET/POST admin), /api/categorias/[id] (PUT/DELETE admin), /api/categorias/public (GET público)
+- Atualizado componente CategoryIcon para aceitar iconName override (24 ícones disponíveis)
+- Criado hook useCategorias que busca categorias da API pública
+- Atualizado asset-form-dialog para usar categorias dinâmicas (DB + ícones customizados)
+- Adicionado menu "Categorias" no sidebar (admin only)
+- Atualizado schema Prisma SQLite e MySQL com model Categoria
+- Validações: admin não pode excluir builtin, não pode desativar builtin, não pode excluir categoria com ativos
+
+Stage Summary:
+- ERRO CLIENT_FETCH_ERROR CORRIGIDO: causa era conflito entre proxy function e default export do next-auth/middleware no Next.js 16
+- Página de login agora abre corretamente (sem erro de fetch)
+- Auto-registro de usuários funcionando em /registro (role USUARIO automático)
+- Categorias dinâmicas: admin pode criar/editar/excluir categorias customizadas
+- 10 categorias padrão marcadas como builtin (não editáveis/excluíveis)
+- Teste curl completo: todas as 11 categorias (10 builtin + 1 TABLET customizada) retornadas
+- Lint 100% limpo

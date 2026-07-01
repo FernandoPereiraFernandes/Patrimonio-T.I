@@ -8,16 +8,19 @@
   "build": "next build && cp -r .next/static .next/standalone/.next/ && cp -r public .next/standalone/",
   "start": "NODE_ENV=production node .next/standalone/server.js 2>&1 | tee server.log",
   "lint": "eslint .",
+
   "db:push": "prisma db push",
   "db:generate": "prisma generate",
   "db:migrate": "prisma migrate dev",
   "db:reset": "prisma migrate reset",
-  "seed": "node prisma/seed.ts"
-    "use-mysql-schema": "cp prisma/schema.mysql.prisma prisma/schema.prisma && echo 'Schema MySQL ativado'",
-    "use-sqlite-schema": "cp prisma/schema.sqlite.bak.prisma prisma/schema.prisma && echo 'Schema SQLite ativado'",
-    "install:linux": "chmod +x scripts/install.sh && ./scripts/install.sh",
-    "install:windows": "powershell -ExecutionPolicy Bypass -File scripts/install.ps1"
-  },
+  "seed": "node prisma/seed.ts",
+
+  "use-mysql-schema": "cp prisma/schema.mysql.prisma prisma/schema.prisma && echo 'Schema MySQL ativado'",
+  "use-sqlite-schema": "cp prisma/schema.sqlite.bak.prisma prisma/schema.prisma && echo 'Schema SQLite ativado'",
+
+  "install:linux": "chmod +x scripts/install.sh && ./scripts/install.sh",
+  "install:windows": "powershell -ExecutionPolicy Bypass -File scripts/install.ps1"
+}
   "dependencies": {
     "@auth/prisma-adapter": "^2.11.2",
     "@dnd-kit/core": "^6.3.1",

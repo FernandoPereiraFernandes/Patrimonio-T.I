@@ -100,7 +100,7 @@ CRIAR_BANCO=${CRIAR_BANCO:-n}
 
 if [[ "$CRIAR_BANCO" =~ ^[sS]$ ]]; then
     log "Criando banco '$DB_NAME' se necessário..."
-    mysql -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -p"$DB_PASSWORD" -e \
+    MYSQL_PWD="$DB_PASSWORD" mysql -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -e \
         "CREATE DATABASE IF NOT EXISTS \`$DB_NAME\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;" \
         2>/dev/null && log "Banco criado/confirmado." || {
             error "Falha ao criar banco. Verifique credenciais e permissões."

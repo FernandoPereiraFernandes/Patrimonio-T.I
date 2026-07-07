@@ -7,12 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { CategoryIcon } from "./category-icon";
 import { StatusBadge, MovimentacaoBadge } from "./badges";
 import { useStats } from "@/lib/queries";
-import {
-  CATEGORIAS,
-  CATEGORIA_COLORS,
-  getCategoriaLabel,
-  getStatusInfo,
-} from "@/lib/constants";
+import { getCategoriaColor, getStatusInfo } from "@/lib/constants";
 import {
   Package,
   Boxes,
@@ -104,13 +99,15 @@ export function Dashboard({ onNavigate }: DashboardProps) {
     },
   ];
 
+  // stats.porCategoria já vem da API com label/labelSingular/icon de TODAS as
+  // categorias ativas (padrão + customizadas), então nenhuma categoria nova fica de fora.
   const dadosCategoria = stats.porCategoria
     .filter((p) => p.count > 0)
     .map((p) => ({
-      name: getCategoriaLabel(p.categoria),
+      name: p.labelSingular,
       categoria: p.categoria,
       qtd: p.count,
-      cor: CATEGORIA_COLORS[p.categoria] ?? "#10b981",
+      cor: getCategoriaColor(p.categoria),
     }));
 
   const dadosStatus = stats.porStatus.map((p) => ({

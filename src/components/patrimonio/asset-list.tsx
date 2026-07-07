@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useSession } from "next-auth/react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -33,7 +34,8 @@ import { AssetFormDialog } from "./asset-form-dialog";
 import { AssetDetailDialog } from "./asset-detail-dialog";
 import { MovementDialog } from "./movement-dialog";
 import { useAtivos, useDeleteAtivo } from "@/lib/queries";
-import { CATEGORIAS, STATUS, getCategoriaLabel } from "@/lib/constants";
+import { useCategorias } from "@/lib/categorias";
+import { STATUS, getCategoriaLabel } from "@/lib/constants";
 import type { Ativo } from "@/lib/types";
 import { toast } from "sonner";
 import {
@@ -43,14 +45,25 @@ import {
   Eye,
   ArrowRightLeft,
   Pencil,
-  Package,
   Inbox,
+  X,
 } from "lucide-react";
 
 export function AssetList() {
+  const { data: session } = useSession();
+  // ADMIN e TECNICO podem criar/editar/excluir/movimentar.
+  // USUARIO (perfil padrão) só visualiza.
+  const podeEditar =
+    session?.user?.role === "ADMIN" || session?.user?.role === "TECNICO";
+
+  const { data: categorias } = useCategorias();
+
   const [busca, setBusca] = useState("");
   const [categoria, setCategoria] = useState<string>("ALL");
   const [status, setStatus] = useState<string>("ALL");
+  const [filtroMarcaModelo, setFiltroMarcaModelo] = useState("");
+  const [filtroResponsavel, setFiltroResponsavel] = useState("");
+  const [filtroLocalizacao, setFiltroLocalizacao] = useState("");
 
   const [formOpen, setFormOpen] = useState(false);
   const [editando, setEditando] = useState<Ativo | null>(null);
@@ -61,6 +74,7 @@ export function AssetList() {
 
   const deleteMut = useDeleteAtivo();
 
+  // Filtros que vão para a API (mantém o comportamento original)
   const filters = useMemo(
     () => ({
       busca: busca || undefined,
@@ -70,7 +84,29 @@ export function AssetList() {
     [busca, categoria, status]
   );
 
-  const { data: ativos, isLoading } = useAtivos(filters);
+  const { data: ativosRaw, isLoading } = useAtivos(filters);
+
+  // Filtros adicionais por coluna (marca/modelo, responsável, localização),
+  // aplicados no cliente sobre o resultado já filtrado pela API.
+  const ativos = useMemo(() => {
+    if (!ativosRaw) return ativosRaw;
+    return ativosRaw.filter((a: Ativo) => {
+      if (filtroMarcaModelo) {
+        const q = filtroMarcaModelo.toLowerCase();
+        const txt = `${a.marca ?? ""} ${a.modelo ?? ""}`.toLowerCase();
+        if (!txt.includes(q)) return false;
+      }
+      if (filtroResponsavel) {
+        const q = filtroResponsavel.toLowerCase();
+        if (!(a.responsavel ?? "").toLowerCase().includes(q)) return false;
+      }
+      if (filtroLocalizacao) {
+        const q = filtroLocalizacao.toLowerCase();
+        if (!(a.localizacao ?? "").toLowerCase().includes(q)) return false;
+      }
+      return true;
+    });
+  }, [ativosRaw, filtroMarcaModelo, filtroResponsavel, filtroLocalizacao]);
 
   const abrirNovo = () => {
     setEditando(null);
@@ -112,9 +148,23 @@ export function AssetList() {
     setBusca("");
     setCategoria("ALL");
     setStatus("ALL");
+    setFiltroMarcaModelo("");
+    setFiltroResponsavel("");
+    setFiltroLocalizacao("");
   };
 
+  const temFiltroAtivo =
+    !!busca ||
+    categoria !== "ALL" ||
+    status !== "ALL" ||
+    !!filtroMarcaModelo ||
+    !!filtroResponsavel ||
+    !!filtroLocalizacao;
+
   const total = ativos?.length ?? 0;
+
+  const categoriaInfo = (value: string) =>
+    categorias?.find((c) => c.value === value);
 
   return (
     <div className="space-y-4">
@@ -128,59 +178,95 @@ export function AssetList() {
             {total} {total === 1 ? "item cadastrado" : "itens cadastrados"}
           </p>
         </div>
-        <Button onClick={abrirNovo} className="self-start sm:self-auto">
-          <Plus className="size-4 mr-1" />
-          Novo Ativo
-        </Button>
+        {podeEditar && (
+          <Button onClick={abrirNovo} className="self-start sm:self-auto">
+            <Plus className="size-4 mr-1" />
+            Novo Ativo
+          </Button>
+        )}
       </div>
 
-      {/* Filtros */}
+      {/* Busca geral */}
       <Card className="p-3">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-            <Input
-              placeholder="Buscar por patrimônio, série, marca, modelo, responsável..."
-              value={busca}
-              onChange={(e) => setBusca(e.target.value)}
-              className="pl-9"
-            />
-          </div>
-          <div className="flex gap-2 flex-wrap">
-            <Select value={categoria} onValueChange={setCategoria}>
-              <SelectTrigger className="w-[170px]">
-                <Filter className="size-4 mr-1 text-muted-foreground" />
-                <SelectValue placeholder="Categoria" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="ALL">Todas categorias</SelectItem>
-                {CATEGORIAS.map((c) => (
-                  <SelectItem key={c.value} value={c.value}>
-                    {c.labelSingular}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Select value={status} onValueChange={setStatus}>
-              <SelectTrigger className="w-[160px]">
-                <SelectValue placeholder="Status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="ALL">Todos status</SelectItem>
-                {STATUS.map((s) => (
-                  <SelectItem key={s.value} value={s.value}>
-                    {s.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {(busca || categoria !== "ALL" || status !== "ALL") && (
-              <Button variant="ghost" size="sm" onClick={limparFiltros}>
-                Limpar
-              </Button>
-            )}
-          </div>
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+          <Input
+            placeholder="Buscar por patrimônio, série, marca, modelo, responsável..."
+            value={busca}
+            onChange={(e) => setBusca(e.target.value)}
+            className="pl-9"
+          />
         </div>
+      </Card>
+
+      {/* Filtros por coluna: categoria, marca/modelo, responsável, localização, status */}
+      <Card className="p-3">
+        <div className="flex items-center gap-1.5 mb-2 text-xs font-medium text-muted-foreground uppercase tracking-wide">
+          <Filter className="size-3.5" />
+          Filtros por coluna
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
+          <Select value={categoria} onValueChange={setCategoria}>
+            <SelectTrigger>
+              <SelectValue placeholder="Categoria" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ALL">Todas categorias</SelectItem>
+              {(categorias ?? []).map((c) => (
+                <SelectItem key={c.value} value={c.value}>
+                  <span className="flex items-center gap-2">
+                    <CategoryIcon
+                      categoria={c.value}
+                      iconName={c.icon}
+                      className="size-3.5"
+                    />
+                    {c.labelSingular}
+                  </span>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Input
+            placeholder="Marca / Modelo"
+            value={filtroMarcaModelo}
+            onChange={(e) => setFiltroMarcaModelo(e.target.value)}
+          />
+
+          <Input
+            placeholder="Responsável"
+            value={filtroResponsavel}
+            onChange={(e) => setFiltroResponsavel(e.target.value)}
+          />
+
+          <Input
+            placeholder="Localização"
+            value={filtroLocalizacao}
+            onChange={(e) => setFiltroLocalizacao(e.target.value)}
+          />
+
+          <Select value={status} onValueChange={setStatus}>
+            <SelectTrigger>
+              <SelectValue placeholder="Status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ALL">Todos status</SelectItem>
+              {STATUS.map((s) => (
+                <SelectItem key={s.value} value={s.value}>
+                  {s.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        {temFiltroAtivo && (
+          <div className="mt-2">
+            <Button variant="ghost" size="sm" onClick={limparFiltros}>
+              <X className="size-3.5 mr-1" />
+              Limpar filtros
+            </Button>
+          </div>
+        )}
       </Card>
 
       {/* Tabela */}
@@ -198,11 +284,11 @@ export function AssetList() {
             </div>
             <h3 className="mt-4 font-medium">Nenhum ativo encontrado</h3>
             <p className="text-sm text-muted-foreground mt-1 max-w-sm">
-              {busca || categoria !== "ALL" || status !== "ALL"
+              {temFiltroAtivo
                 ? "Tente ajustar os filtros de busca."
                 : "Comece cadastrando o primeiro item de patrimônio."}
             </p>
-            {!busca && categoria === "ALL" && status === "ALL" && (
+            {!temFiltroAtivo && podeEditar && (
               <Button onClick={abrirNovo} className="mt-4" size="sm">
                 <Plus className="size-4 mr-1" />
                 Cadastrar Ativo
@@ -229,117 +315,125 @@ export function AssetList() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {ativos?.map((a) => (
-                  <TableRow
-                    key={a.id}
-                    className="cursor-pointer hover:bg-muted/40"
-                    onClick={() => abrirDetalhe(a.id)}
-                  >
-                    <TableCell>
-                      <div className="flex size-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                        <CategoryIcon
-                          categoria={a.categoria}
-                          className="size-4"
-                        />
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="font-mono text-sm font-medium">
-                        {a.numeroPatrimonio}
-                      </div>
-                      {a.numeroSerie && (
-                        <div className="text-xs text-muted-foreground">
-                          {a.numeroSerie}
+                {ativos?.map((a) => {
+                  const catInfo = categoriaInfo(a.categoria);
+                  return (
+                    <TableRow
+                      key={a.id}
+                      className="cursor-pointer hover:bg-muted/40"
+                      onClick={() => abrirDetalhe(a.id)}
+                    >
+                      <TableCell>
+                        <div className="flex size-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                          <CategoryIcon
+                            categoria={a.categoria}
+                            iconName={catInfo?.icon}
+                            className="size-4"
+                          />
                         </div>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="outline" className="font-normal">
-                        {getCategoriaLabel(a.categoria)}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <div className="font-medium text-sm">
-                        {a.marca ?? "—"}
-                      </div>
-                      <div className="text-xs text-muted-foreground">
-                        {a.modelo ?? ""}
-                      </div>
-                    </TableCell>
-                    <TableCell className="hidden md:table-cell text-sm">
-                      {a.responsavel ?? (
-                        <span className="text-muted-foreground">—</span>
-                      )}
-                    </TableCell>
-                    <TableCell className="hidden lg:table-cell text-sm">
-                      {a.localizacao ?? (
-                        <span className="text-muted-foreground">—</span>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <StatusBadge status={a.status} />
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div
-                        className="flex items-center justify-end gap-1"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <TooltipProvider>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="size-8"
-                                onClick={() => abrirDetalhe(a.id)}
-                              >
-                                <Eye className="size-4" />
-                              </Button>
-                            </TooltipTrigger>
-                            <TooltipContent>Ver detalhes</TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
-                        <TooltipProvider>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="size-8"
-                                onClick={() => abrirMovimentacao(a)}
-                              >
-                                <ArrowRightLeft className="size-4" />
-                              </Button>
-                            </TooltipTrigger>
-                            <TooltipContent>Movimentar</TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
-                        <TooltipProvider>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="size-8"
-                                onClick={() => abrirEdicao(a)}
-                              >
-                                <Pencil className="size-4" />
-                              </Button>
-                            </TooltipTrigger>
-                            <TooltipContent>Editar</TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
+                      </TableCell>
+                      <TableCell>
+                        <div className="font-mono text-sm font-medium">
+                          {a.numeroPatrimonio}
+                        </div>
+                        {a.numeroSerie && (
+                          <div className="text-xs text-muted-foreground">
+                            {a.numeroSerie}
+                          </div>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className="font-normal">
+                          {catInfo?.labelSingular ?? getCategoriaLabel(a.categoria)}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <div className="font-medium text-sm">
+                          {a.marca ?? "—"}
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          {a.modelo ?? ""}
+                        </div>
+                      </TableCell>
+                      <TableCell className="hidden md:table-cell text-sm">
+                        {a.responsavel ?? (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="hidden lg:table-cell text-sm">
+                        {a.localizacao ?? (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <StatusBadge status={a.status} />
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div
+                          className="flex items-center justify-end gap-1"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="size-8"
+                                  onClick={() => abrirDetalhe(a.id)}
+                                >
+                                  <Eye className="size-4" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>Ver detalhes</TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                          {podeEditar && (
+                            <>
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="size-8"
+                                      onClick={() => abrirMovimentacao(a)}
+                                    >
+                                      <ArrowRightLeft className="size-4" />
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>Movimentar</TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="size-8"
+                                      onClick={() => abrirEdicao(a)}
+                                    >
+                                      <Pencil className="size-4" />
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>Editar</TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                            </>
+                          )}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           </div>
         )}
       </Card>
 
-      {/* Diálogos */}
+      {/* Diálogos (só fazem sentido para quem pode editar, mas o guard real está no middleware/API) */}
       <AssetFormDialog
         open={formOpen}
         onOpenChange={setFormOpen}
@@ -349,23 +443,34 @@ export function AssetList() {
         open={detalheOpen}
         onOpenChange={setDetalheOpen}
         ativoId={detalheId}
-        onEdit={() => {
-          setDetalheOpen(false);
-          // Buscar o ativo da lista para edição
-          const a = ativos?.find((x) => x.id === detalheId) ?? null;
-          setEditando(a);
-          setFormOpen(true);
-        }}
-        onMove={() => {
-          setDetalheOpen(false);
-          const a = ativos?.find((x) => x.id === detalheId) ?? null;
-          setMovAtivo(a);
-          setMovOpen(true);
-        }}
-        onDelete={() => {
-          const a = ativos?.find((x) => x.id === detalheId);
-          if (a) handleDelete(a);
-        }}
+        onEdit={
+          podeEditar
+            ? () => {
+                setDetalheOpen(false);
+                const a = ativos?.find((x) => x.id === detalheId) ?? null;
+                setEditando(a);
+                setFormOpen(true);
+              }
+            : undefined
+        }
+        onMove={
+          podeEditar
+            ? () => {
+                setDetalheOpen(false);
+                const a = ativos?.find((x) => x.id === detalheId) ?? null;
+                setMovAtivo(a);
+                setMovOpen(true);
+              }
+            : undefined
+        }
+        onDelete={
+          podeEditar
+            ? () => {
+                const a = ativos?.find((x) => x.id === detalheId);
+                if (a) handleDelete(a);
+              }
+            : undefined
+        }
       />
       <MovementDialog
         open={movOpen}

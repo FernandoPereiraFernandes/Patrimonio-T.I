@@ -11,6 +11,7 @@ import { MovementsView } from "@/components/patrimonio/movements-view";
 import { ReportsView } from "@/components/patrimonio/reports-view";
 import { ThemeToggle } from "@/components/patrimonio/theme-toggle";
 import { UserMenu } from "@/components/patrimonio/user-menu";
+import { useCategorias } from "@/lib/categorias";
 import { cn } from "@/lib/utils";
 import {
   LayoutDashboard,
@@ -21,11 +22,19 @@ import {
   ServerCog,
   Users,
   Tags,
+  Settings,
   Heart,
   ShieldCheck,
 } from "lucide-react";
 
-type View = "dashboard" | "patrimonio" | "movimentacoes" | "relatorios" | "usuarios" | "categorias";
+type View =
+  | "dashboard"
+  | "patrimonio"
+  | "movimentacoes"
+  | "relatorios"
+  | "usuarios"
+  | "categorias"
+  | "configuracao";
 
 export default function Home() {
   const { data: session } = useSession();
@@ -46,6 +55,7 @@ export default function Home() {
     { value: "relatorios", label: "Relatórios", icon: BarChart3, desc: "Análises" },
     { value: "usuarios", label: "Usuários", icon: Users, desc: "Gerenciar acessos", adminOnly: true },
     { value: "categorias", label: "Categorias", icon: Tags, desc: "Tipos de ativos", adminOnly: true },
+    { value: "configuracao", label: "Configuração", icon: Settings, desc: "Atualização via GitHub", adminOnly: true },
   ];
 
   const navItems = NAV.filter((n) => !n.adminOnly || isAdmin);
@@ -130,6 +140,7 @@ export default function Home() {
             {view === "relatorios" && <ReportsView />}
             {view === "usuarios" && isAdmin && <UsersPageLazy />}
             {view === "categorias" && isAdmin && <CategoriasPageLazy />}
+            {view === "configuracao" && isAdmin && <ConfiguracaoPageLazy />}
           </div>
         </main>
       </div>
@@ -152,7 +163,7 @@ export default function Home() {
   );
 }
 
-// Lazy import para evitar carregar usuários se não for admin
+// Lazy import para evitar carregar páginas administrativas se não for admin
 import dynamic from "next/dynamic";
 const UsersPageLazy = dynamic(
   () => import("@/app/usuarios/page").then((m) => m.default),
@@ -160,6 +171,10 @@ const UsersPageLazy = dynamic(
 );
 const CategoriasPageLazy = dynamic(
   () => import("@/app/categorias/page").then((m) => m.default),
+  { ssr: false }
+);
+const ConfiguracaoPageLazy = dynamic(
+  () => import("@/app/configuracao/page").then((m) => m.default),
   { ssr: false }
 );
 
@@ -174,6 +189,9 @@ function SidebarContent({
   navItems: { value: string; label: string; icon: React.ElementType; desc: string; adminOnly?: boolean }[];
   isAdmin: boolean;
 }) {
+  // Categorias dinâmicas (padrão + customizadas) para o atalho rápido no rodapé do menu
+  const { data: categorias } = useCategorias();
+
   return (
     <div className="flex h-full flex-col">
       {/* Logo no topo do sidebar (mobile) */}
@@ -232,39 +250,25 @@ function SidebarContent({
         })}
       </nav>
 
-      {/* Categorias rápidas */}
+      {/* Categorias rápidas — agora vem do banco (padrão + customizadas) */}
       <div className="p-3 border-t border-sidebar-border">
         <p className="px-3 pb-2 text-xs font-semibold uppercase tracking-wider text-sidebar-foreground/50">
           Categorias
         </p>
-        <div className="grid grid-cols-2 gap-1.5 px-1">
-          {[
-            "MONITOR",
-            "CPU",
-            "NOTEBOOK",
-            "TV",
-            "RACK",
-            "SERVIDOR",
-            "IMPRESSORA",
-            "IMPRESSORA_ZEBRA",
-            "SMARTPHONE",
-            "TELEFONE_FIXO",
-          ].map((cat) => (
+        <div className="grid grid-cols-2 gap-1.5 px-1 max-h-40 overflow-y-auto custom-scroll">
+          {(categorias ?? []).map((c) => (
             <button
-              key={cat}
+              key={c.value}
               onClick={() => onNavigate("patrimonio")}
               className="flex items-center gap-1.5 rounded-md px-2 py-1.5 text-[11px] text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors"
-              title={cat}
+              title={c.labelSingular}
             >
               <CategoryIcon
-                categoria={cat}
+                categoria={c.value}
+                iconName={c.icon}
                 className="size-3.5 shrink-0 opacity-70"
               />
-              <span className="truncate">
-                {cat === "IMPRESSORA_ZEBRA"
-                  ? "Zebra"
-                  : cat.charAt(0) + cat.slice(1).toLowerCase()}
-              </span>
+              <span className="truncate">{c.labelSingular}</span>
             </button>
           ))}
         </div>

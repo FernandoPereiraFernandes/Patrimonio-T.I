@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { CATEGORIAS } from "@/lib/constants";
 
 // GET /api/ativos/stats - estatísticas do dashboard
 export async function GET() {
@@ -12,7 +11,7 @@ export async function GET() {
   }
 
   try {
-    const [totalAtivos, porStatus, porCategoria, valorAgg, recentes] =
+    const [totalAtivos, porStatus, porCategoria, valorAgg, recentes, categoriasAtivas] =
       await Promise.all([
         db.ativo.count(),
         db.ativo.groupBy({
@@ -29,13 +28,19 @@ export async function GET() {
           orderBy: { data: "desc" },
           include: { ativo: true },
         }),
+        // Busca TODAS as categorias ativas (padrão do sistema + customizadas)
+        // em vez da lista estática, para que categorias novas apareçam no painel.
+        db.categoria.findMany({ where: { ativa: true } }),
       ]);
 
-    // Garantir que todas as categorias apareçam (mesmo com 0)
-    const porCategoriaCompleto = CATEGORIAS.map((c) => {
+    // Garantir que todas as categorias (inclusive customizadas) apareçam, mesmo com 0
+    const porCategoriaCompleto = categoriasAtivas.map((c) => {
       const found = porCategoria.find((p) => p.categoria === c.value);
       return {
         categoria: c.value,
+        label: c.label,
+        labelSingular: c.labelSingular,
+        icon: c.icon,
         count: found?._count.categoria ?? 0,
       };
     });

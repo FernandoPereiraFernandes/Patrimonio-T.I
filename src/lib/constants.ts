@@ -140,7 +140,7 @@ export function getTipoMovimentacaoInfo(value: string) {
   return TIPOS_MOVIMENTACAO.find((t) => t.value === value);
 }
 
-// Cores por categoria para gráficos
+// Cores por categoria para gráficos (categorias padrão do sistema)
 export const CATEGORIA_COLORS: Record<string, string> = {
   MONITOR: "#10b981", // emerald
   CPU: "#0ea5e9", // sky
@@ -153,3 +153,26 @@ export const CATEGORIA_COLORS: Record<string, string> = {
   SMARTPHONE: "#84cc16", // lime
   TELEFONE_FIXO: "#f97316", // orange
 };
+
+// Paleta de reserva (hex) para categorias sem cor definida em CATEGORIA_COLORS.
+// Usar hex (e não hsl()) é proposital: alguns componentes concatenam alpha
+// manualmente (ex: `${cor}22`), o que só funciona com hex.
+const PALETA_FALLBACK = [
+  "#10b981", "#0ea5e9", "#8b5cf6", "#f59e0b", "#ef4444",
+  "#ec4899", "#14b8a6", "#84cc16", "#f97316", "#6366f1",
+  "#06b6d4", "#a855f7", "#eab308", "#22c55e", "#f43f5e",
+];
+
+// Gera uma cor determinística para categorias que não estão em CATEGORIA_COLORS
+// (ex: categorias customizadas criadas pelo admin). Assim gráficos nunca
+// mostram todas as categorias novas na mesma cor.
+export function getCategoriaColor(value: string): string {
+  const fixa = CATEGORIA_COLORS[value];
+  if (fixa) return fixa;
+
+  let hash = 0;
+  for (let i = 0; i < value.length; i++) {
+    hash = value.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  return PALETA_FALLBACK[Math.abs(hash) % PALETA_FALLBACK.length];
+}

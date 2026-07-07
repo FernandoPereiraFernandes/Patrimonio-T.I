@@ -4,11 +4,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { CategoryIcon } from "./category-icon";
 import { useAtivos, useStats } from "@/lib/queries";
-import {
-  CATEGORIAS,
-  CATEGORIA_COLORS,
-  getCategoriaLabel,
-} from "@/lib/constants";
+import { useCategorias } from "@/lib/categorias";
+import { getCategoriaColor } from "@/lib/constants";
 import {
   BarChart,
   Bar,
@@ -27,8 +24,9 @@ import { PieChart as PieIcon, BarChart3, MapPin, Building2 } from "lucide-react"
 export function ReportsView() {
   const { data: ativos, isLoading: loadingAtivos } = useAtivos();
   const { data: stats, isLoading: loadingStats } = useStats();
+  const { data: categorias, isLoading: loadingCategorias } = useCategorias();
 
-  if (loadingAtivos || loadingStats || !ativos || !stats) {
+  if (loadingAtivos || loadingStats || loadingCategorias || !ativos || !stats) {
     return (
       <div className="space-y-4">
         <Skeleton className="h-8 w-48" />
@@ -40,24 +38,27 @@ export function ReportsView() {
     );
   }
 
-  // Valor por categoria
-  const valorPorCategoria = CATEGORIAS.map((c) => {
-    const itens = ativos.filter(
-      (a: { categoria: string; valorAquisicao: number | null }) =>
-        a.categoria === c.value
-    );
-    const valor = itens.reduce(
-      (acc: number, a: { valorAquisicao: number | null }) =>
-        acc + (a.valorAquisicao ?? 0),
-      0
-    );
-    return {
-      name: c.labelSingular,
-      categoria: c.value,
-      valor,
-      qtd: itens.length,
-    };
-  })
+  const listaCategorias = categorias ?? [];
+
+  // Valor por categoria — agora percorre TODAS as categorias ativas (padrão + customizadas)
+  const valorPorCategoria = listaCategorias
+    .map((c) => {
+      const itens = ativos.filter(
+        (a: { categoria: string; valorAquisicao: number | null }) =>
+          a.categoria === c.value
+      );
+      const valor = itens.reduce(
+        (acc: number, a: { valorAquisicao: number | null }) =>
+          acc + (a.valorAquisicao ?? 0),
+        0
+      );
+      return {
+        name: c.labelSingular,
+        categoria: c.value,
+        valor,
+        qtd: itens.length,
+      };
+    })
     .filter((d) => d.qtd > 0)
     .sort((a, b) => b.valor - a.valor);
 
@@ -145,10 +146,7 @@ export function ReportsView() {
                 />
                 <Bar dataKey="valor" radius={[6, 6, 0, 0]}>
                   {valorPorCategoria.map((entry, idx) => (
-                    <Cell
-                      key={idx}
-                      fill={CATEGORIA_COLORS[entry.categoria] ?? "#10b981"}
-                    />
+                    <Cell key={idx} fill={getCategoriaColor(entry.categoria)} />
                   ))}
                 </Bar>
               </BarChart>
@@ -260,53 +258,59 @@ export function ReportsView() {
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {CATEGORIAS.filter((c) =>
-              stats.porCategoria.some((p) => p.categoria === c.value && p.count > 0)
-            ).map((c) => {
-              const dados = stats.porCategoria.find(
-                (p) => p.categoria === c.value
-              );
-              const valorCat = valorPorCategoria.find(
-                (v) => v.categoria === c.value
-              );
-              return (
-                <div
-                  key={c.value}
-                  className="rounded-lg border p-3 flex items-center gap-3"
-                >
+            {listaCategorias
+              .filter((c) =>
+                stats.porCategoria.some(
+                  (p) => p.categoria === c.value && p.count > 0
+                )
+              )
+              .map((c) => {
+                const dados = stats.porCategoria.find(
+                  (p) => p.categoria === c.value
+                );
+                const valorCat = valorPorCategoria.find(
+                  (v) => v.categoria === c.value
+                );
+                const cor = getCategoriaColor(c.value);
+                return (
                   <div
-                    className="flex size-10 items-center justify-center rounded-lg shrink-0"
-                    style={{
-                      background: `${CATEGORIA_COLORS[c.value]}22`,
-                      color: CATEGORIA_COLORS[c.value],
-                    }}
+                    key={c.value}
+                    className="rounded-lg border p-3 flex items-center gap-3"
                   >
-                    <CategoryIcon
-                      categoria={c.value}
-                      className="size-5"
-                    />
-                  </div>
-                  <div className="min-w-0">
-                    <div className="text-sm font-medium truncate">
-                      {c.labelSingular}
+                    <div
+                      className="flex size-10 items-center justify-center rounded-lg shrink-0"
+                      style={{
+                        background: `${cor}22`,
+                        color: cor,
+                      }}
+                    >
+                      <CategoryIcon
+                        categoria={c.value}
+                        iconName={c.icon}
+                        className="size-5"
+                      />
                     </div>
-                    <div className="text-xs text-muted-foreground">
-                      {dados?.count ?? 0}{" "}
-                      {(dados?.count ?? 0) === 1 ? "item" : "itens"}
-                      {valorCat && valorCat.valor > 0 && (
-                        <>
-                          {" · "}
-                          {valorCat.valor.toLocaleString("pt-BR", {
-                            style: "currency",
-                            currency: "BRL",
-                          })}
-                        </>
-                      )}
+                    <div className="min-w-0">
+                      <div className="text-sm font-medium truncate">
+                        {c.labelSingular}
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        {dados?.count ?? 0}{" "}
+                        {(dados?.count ?? 0) === 1 ? "item" : "itens"}
+                        {valorCat && valorCat.valor > 0 && (
+                          <>
+                            {" · "}
+                            {valorCat.valor.toLocaleString("pt-BR", {
+                              style: "currency",
+                              currency: "BRL",
+                            })}
+                          </>
+                        )}
+                      </div>
                     </div>
                   </div>
-                </div>
-              );
-            })}
+                );
+              })}
           </div>
         </CardContent>
       </Card>

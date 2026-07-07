@@ -5,20 +5,36 @@ import { getToken } from "next-auth/jwt";
 // Em vez de usar next-auth/middleware (que conflita com proxy.ts no Next.js 16),
 // usamos getToken do next-auth/jwt diretamente.
 
+// Rotas públicas (NÃO exigem autenticação)
+const publicPaths = [
+  "/login",
+  "/registro",
+  "/install",
+  "/api/auth",              // rotas do NextAuth
+  "/api/install",           // instalador
+  "/api/setup-first-admin",
+  "/api/registro",          // auto-cadastro
+  "/api/categorias/public", // lista pública de categorias (para formulários)
+];
+
+// Prefixos de API de domínio onde o perfil USUARIO só pode LER (GET).
+// Qualquer verbo de escrita nessas rotas é bloqueado para USUARIO,
+// mesmo que algum botão apareça indevidamente na tela.
+const restrictedApiPrefixes = [
+  "/api/ativos",
+  "/api/movimentacoes",
+  "/api/categorias",
+  "/api/users",
+  "/api/config", // aba de configuração/atualização (futuro)
+];
+
+// Páginas administrativas: USUARIO nem deveria conseguir navegar até elas.
+const adminOnlyPages = ["/categorias", "/usuarios", "/configuracao"];
+
+const WRITE_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
+
 export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
-
-  // Rotas públicas (NÃO exigem autenticação)
-  const publicPaths = [
-    "/login",
-    "/registro",
-    "/install",
-    "/api/auth",          // rotas do NextAuth
-    "/api/install",       // instalador
-    "/api/setup-first-admin",
-    "/api/registro",      // auto-cadastro
-    "/api/categorias/public", // lista pública de categorias (para formulários)
-  ];
 
   const isPublic = publicPaths.some((p) => pathname.startsWith(p));
   if (isPublic) {
@@ -32,17 +48,31 @@ export async function proxy(req: NextRequest) {
   });
 
   if (!token) {
-    // Se for API, retorna 401 JSON
     if (pathname.startsWith("/api/")) {
-      return NextResponse.json(
-        { error: "Não autenticado" },
-        { status: 401 }
-      );
+      return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
     }
-    // Se for página, redireciona para login
     const loginUrl = new URL("/login", req.url);
     loginUrl.searchParams.set("callbackUrl", req.url);
     return NextResponse.redirect(loginUrl);
+  }
+
+  const role = (token.role as string) || "USUARIO";
+
+  // ---- Bloqueio de escrita via API para perfil USUARIO ----
+  if (
+    role === "USUARIO" &&
+    WRITE_METHODS.has(req.method) &&
+    restrictedApiPrefixes.some((p) => pathname.startsWith(p))
+  ) {
+    return NextResponse.json(
+      { error: "Seu perfil tem acesso somente de leitura." },
+      { status: 403 }
+    );
+  }
+
+  // ---- Bloqueio de navegação para telas administrativas ----
+  if (role === "USUARIO" && adminOnlyPages.some((p) => pathname.startsWith(p))) {
+    return NextResponse.redirect(new URL("/", req.url));
   }
 
   return NextResponse.next();

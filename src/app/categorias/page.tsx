@@ -38,7 +38,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { CategoryIcon } from "@/components/patrimonio/category-icon";
+import { CategoryIcon, isIconeConhecido } from "@/components/patrimonio/category-icon";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
@@ -53,6 +53,7 @@ import {
   X,
   Save,
   Lock,
+  AlertTriangle,
 } from "lucide-react";
 
 interface Categoria {
@@ -73,7 +74,17 @@ const ICONES_DISPONIVEIS = [
   "Wifi", "Router", "Network", "Cable", "Battery",
   "Camera", "Keyboard", "Mouse", "Headphones", "Speaker",
   "HardDriveDownload", "MemoryStick", "CircuitBoard",
+  "Zap", "Radio", "Bluetooth", "Usb", "Disc", "Save",
+  "FileText", "Folder", "FolderOpen", "Layers", "Box", "Boxes",
+  "Truck", "ShoppingCart", "CreditCard", "Lock", "Unlock", "Key",
+  "Settings", "Cog", "Wrench", "QrCode", "Barcode", "Fingerprint",
+  "Video", "Gamepad2", "Watch", "Gauge", "Thermometer", "Fan",
+  "Plug", "PlugZap", "BatteryCharging", "Lightbulb", "Power",
+  "Database", "Cloud", "CloudUpload", "Share2", "Link", "Link2",
+  "Globe", "ScanLine",
 ];
+
+const OPCAO_ICONE_CUSTOM = "__CUSTOM__";
 
 export default function CategoriasPage() {
   const { data: session } = useSession();
@@ -340,6 +351,8 @@ function CategoriaFormDialog({
   const [label, setLabel] = useState("");
   const [labelSingular, setLabelSingular] = useState("");
   const [icon, setIcon] = useState("Package");
+  // Controla se o Select está no modo "digitar nome customizado"
+  const [iconModoCustom, setIconModoCustom] = useState(false);
   const [campos, setCampos] = useState<string[]>([]);
   const [novoCampo, setNovoCampo] = useState("");
   const [saving, setSaving] = useState(false);
@@ -354,6 +367,7 @@ function CategoriaFormDialog({
       setLabel("");
       setLabelSingular("");
       setIcon("Package");
+      setIconModoCustom(false);
       setCampos([]);
       setNovoCampo("");
     }
@@ -383,13 +397,17 @@ function CategoriaFormDialog({
       toast.error("Chave da categoria é obrigatória");
       return;
     }
+    if (!icon.trim()) {
+      toast.error("Informe um ícone");
+      return;
+    }
 
     setSaving(true);
     try {
       const payload: Record<string, unknown> = {
         label,
         labelSingular,
-        icon,
+        icon: icon.trim(),
         campos,
       };
       if (!editando) payload.value = value.toUpperCase();
@@ -426,6 +444,7 @@ function CategoriaFormDialog({
     setLabel(editando.label);
     setLabelSingular(editando.labelSingular);
     setIcon(editando.icon);
+    setIconModoCustom(!ICONES_DISPONIVEIS.includes(editando.icon));
     setCampos(editando.campos || []);
   }
 
@@ -495,26 +514,93 @@ function CategoriaFormDialog({
 
           {/* Ícone */}
           <div className="space-y-1.5">
-            <Label>Ícone</Label>
-            <Select value={icon} onValueChange={setIcon}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent className="max-h-72">
-                {ICONES_DISPONIVEIS.map((ic) => (
-                  <SelectItem key={ic} value={ic}>
-                    <span className="flex items-center gap-2">
-                      <CategoryIcon
-                        categoria="CUSTOM"
-                        iconName={ic}
-                        className="size-4"
-                      />
-                      {ic}
+            <div className="flex items-center justify-between">
+              <Label>Ícone</Label>
+              <div className="flex items-center gap-1">
+                <div className="flex size-7 items-center justify-center rounded-md border bg-muted/40">
+                  <CategoryIcon
+                    categoria="CUSTOM"
+                    iconName={icon}
+                    className="size-4"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {!iconModoCustom ? (
+              <Select
+                value={icon}
+                onValueChange={(v) => {
+                  if (v === OPCAO_ICONE_CUSTOM) {
+                    setIconModoCustom(true);
+                    setIcon("");
+                  } else {
+                    setIcon(v);
+                  }
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="max-h-72">
+                  {ICONES_DISPONIVEIS.map((ic) => (
+                    <SelectItem key={ic} value={ic}>
+                      <span className="flex items-center gap-2">
+                        <CategoryIcon
+                          categoria="CUSTOM"
+                          iconName={ic}
+                          className="size-4"
+                        />
+                        {ic}
+                      </span>
+                    </SelectItem>
+                  ))}
+                  <SelectItem value={OPCAO_ICONE_CUSTOM}>
+                    <span className="text-primary font-medium">
+                      + Digitar outro nome de ícone...
                     </span>
                   </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+                </SelectContent>
+              </Select>
+            ) : (
+              <div className="space-y-1.5">
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="Ex: Zap, Radio, Truck, Fingerprint..."
+                    value={icon}
+                    onChange={(e) => setIcon(e.target.value)}
+                    className="font-mono"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      setIconModoCustom(false);
+                      setIcon("Package");
+                    }}
+                  >
+                    Usar lista
+                  </Button>
+                </div>
+                {icon && !isIconeConhecido(icon) && (
+                  <p className="text-xs text-amber-600 dark:text-amber-400 flex items-start gap-1">
+                    <AlertTriangle className="size-3 mt-0.5 shrink-0" />
+                    Ícone &quot;{icon}&quot; não reconhecido pelo sistema — vai
+                    aparecer como ícone padrão até alguém adicionar esse nome
+                    na lista de ícones suportados. Confira o nome exato em{" "}
+                    <a
+                      href="https://lucide.dev/icons"
+                      target="_blank"
+                      rel="noreferrer"
+                      className="underline"
+                    >
+                      lucide.dev/icons
+                    </a>
+                    .
+                  </p>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Campos específicos */}

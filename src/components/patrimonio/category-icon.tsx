@@ -24,10 +24,55 @@ import {
   Speaker,
   MemoryStick,
   CircuitBoard,
+  Zap,
+  Radio,
+  Bluetooth,
+  Usb,
+  Disc,
+  Save,
+  FileText,
+  Folder,
+  FolderOpen,
+  Layers,
+  Box,
+  Boxes,
+  Truck,
+  ShoppingCart,
+  CreditCard,
+  Lock,
+  Unlock,
+  Key,
+  Settings,
+  Cog,
+  Wrench,
+  QrCode,
+  Barcode,
+  Fingerprint,
+  Video,
+  Gamepad2,
+  Watch,
+  Gauge,
+  Thermometer,
+  Fan,
+  Plug,
+  PlugZap,
+  BatteryCharging,
+  Lightbulb,
+  Power,
+  Database,
+  Cloud,
+  CloudUpload,
+  Share2,
+  Link,
+  Link2,
+  Globe,
+  ScanLine,
   type LucideIcon,
 } from "lucide-react";
 
-// Mapa completo de ícones suportados (built-in + customizados)
+// Mapa completo de ícones suportados (built-in + customizados).
+// Se o admin digitar um nome de ícone que NÃO está nesta lista, o sistema
+// cai no ícone padrão (Package) — veja a lista completa em lucide.dev/icons
 export const CATEGORY_ICONS: Record<string, LucideIcon> = {
   MONITOR: Monitor,
   CPU: Cpu,
@@ -55,6 +100,49 @@ export const CATEGORY_ICONS: Record<string, LucideIcon> = {
   HardDriveDownload: HardDrive,
   MemoryStick,
   CircuitBoard,
+  Zap,
+  Radio,
+  Bluetooth,
+  Usb,
+  Disc,
+  Save,
+  FileText,
+  Folder,
+  FolderOpen,
+  Layers,
+  Box,
+  Boxes,
+  Truck,
+  ShoppingCart,
+  CreditCard,
+  Lock,
+  Unlock,
+  Key,
+  Settings,
+  Cog,
+  Wrench,
+  QrCode,
+  Barcode,
+  Fingerprint,
+  Video,
+  Gamepad2,
+  Watch,
+  Gauge,
+  Thermometer,
+  Fan,
+  Plug,
+  PlugZap,
+  BatteryCharging,
+  Lightbulb,
+  Power,
+  Database,
+  Cloud,
+  CloudUpload,
+  Share2,
+  Link,
+  Link2,
+  Globe,
+  ScanLine,
 };
 
 export function CategoryIcon({
@@ -72,4 +160,10 @@ export function CategoryIcon({
     CATEGORY_ICONS[categoria] ||
     Package;
   return <Icon className={className} />;
+}
+
+// Verifica se um nome de ícone é reconhecido (usado para dar feedback visual
+// no formulário de categoria quando o admin digita um nome customizado)
+export function isIconeConhecido(nome: string): boolean {
+  return nome in CATEGORY_ICONS;
 }

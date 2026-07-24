@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useSession } from "next-auth/react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -35,7 +35,7 @@ import { AssetDetailDialog } from "./asset-detail-dialog";
 import { MovementDialog } from "./movement-dialog";
 import { useAtivos, useDeleteAtivo } from "@/lib/queries";
 import { useCategorias } from "@/lib/categorias";
-import { STATUS, getCategoriaLabel } from "@/lib/constants";
+import { STATUS, getCategoriaLabel, compareNumeroPatrimonio } from "@/lib/constants";
 import type { Ativo } from "@/lib/types";
 import { toast } from "sonner";
 import {
@@ -45,9 +45,14 @@ import {
   Eye,
   ArrowRightLeft,
   Pencil,
+  Copy,
   Inbox,
   X,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
+
+const TAMANHOS_PAGINA = [10, 20, 30, 50];
 
 export function AssetList() {
   const { data: session } = useSession();
@@ -65,8 +70,13 @@ export function AssetList() {
   const [filtroResponsavel, setFiltroResponsavel] = useState("");
   const [filtroLocalizacao, setFiltroLocalizacao] = useState("");
 
+  // Paginação
+  const [pageSize, setPageSize] = useState(10);
+  const [page, setPage] = useState(1);
+
   const [formOpen, setFormOpen] = useState(false);
   const [editando, setEditando] = useState<Ativo | null>(null);
+  const [duplicando, setDuplicando] = useState<Ativo | null>(null);
   const [detalheId, setDetalheId] = useState<string | null>(null);
   const [detalheOpen, setDetalheOpen] = useState(false);
   const [movOpen, setMovOpen] = useState(false);
@@ -87,10 +97,12 @@ export function AssetList() {
   const { data: ativosRaw, isLoading } = useAtivos(filters);
 
   // Filtros adicionais por coluna (marca/modelo, responsável, localização),
-  // aplicados no cliente sobre o resultado já filtrado pela API.
+  // aplicados no cliente sobre o resultado já filtrado pela API. Em seguida,
+  // ordena por número de patrimônio em ordem NUMÉRICA (001, 002, ..., 010),
+  // e não alfabética (que colocaria "010" antes de "002").
   const ativos = useMemo(() => {
     if (!ativosRaw) return ativosRaw;
-    return ativosRaw.filter((a: Ativo) => {
+    const filtrados = ativosRaw.filter((a: Ativo) => {
       if (filtroMarcaModelo) {
         const q = filtroMarcaModelo.toLowerCase();
         const txt = `${a.marca ?? ""} ${a.modelo ?? ""}`.toLowerCase();
@@ -106,15 +118,41 @@ export function AssetList() {
       }
       return true;
     });
+    return [...filtrados].sort((a, b) =>
+      compareNumeroPatrimonio(a.numeroPatrimonio, b.numeroPatrimonio)
+    );
   }, [ativosRaw, filtroMarcaModelo, filtroResponsavel, filtroLocalizacao]);
+
+  // Sempre que um filtro ou o tamanho de página muda, volta pra página 1
+  useEffect(() => {
+    setPage(1);
+  }, [busca, categoria, status, filtroMarcaModelo, filtroResponsavel, filtroLocalizacao, pageSize]);
+
+  const totalFiltrado = ativos?.length ?? 0;
+  const totalPaginas = Math.max(1, Math.ceil(totalFiltrado / pageSize));
+  const paginaAtual = Math.min(page, totalPaginas);
+
+  const ativosPaginados = useMemo(() => {
+    if (!ativos) return ativos;
+    const inicio = (paginaAtual - 1) * pageSize;
+    return ativos.slice(inicio, inicio + pageSize);
+  }, [ativos, paginaAtual, pageSize]);
 
   const abrirNovo = () => {
     setEditando(null);
+    setDuplicando(null);
     setFormOpen(true);
   };
 
   const abrirEdicao = (a: Ativo) => {
     setEditando(a);
+    setDuplicando(null);
+    setFormOpen(true);
+  };
+
+  const abrirDuplicar = (a: Ativo) => {
+    setEditando(null);
+    setDuplicando(a);
     setFormOpen(true);
   };
 
@@ -161,8 +199,6 @@ export function AssetList() {
     !!filtroResponsavel ||
     !!filtroLocalizacao;
 
-  const total = ativos?.length ?? 0;
-
   const categoriaInfo = (value: string) =>
     categorias?.find((c) => c.value === value);
 
@@ -175,7 +211,7 @@ export function AssetList() {
             Patrimônio de TI
           </h2>
           <p className="text-sm text-muted-foreground">
-            {total} {total === 1 ? "item cadastrado" : "itens cadastrados"}
+            {totalFiltrado} {totalFiltrado === 1 ? "item cadastrado" : "itens cadastrados"}
           </p>
         </div>
         {podeEditar && (
@@ -277,7 +313,7 @@ export function AssetList() {
               <Skeleton key={i} className="h-12 w-full" />
             ))}
           </div>
-        ) : total === 0 ? (
+        ) : totalFiltrado === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 text-center">
             <div className="flex size-16 items-center justify-center rounded-full bg-muted">
               <Inbox className="size-8 text-muted-foreground" />
@@ -296,140 +332,207 @@ export function AssetList() {
             )}
           </div>
         ) : (
-          <div className="overflow-x-auto custom-scroll">
-            <Table>
-              <TableHeader>
-                <TableRow className="bg-muted/40 hover:bg-muted/40">
-                  <TableHead className="w-[60px]"></TableHead>
-                  <TableHead>Patrimônio</TableHead>
-                  <TableHead>Categoria</TableHead>
-                  <TableHead>Marca / Modelo</TableHead>
-                  <TableHead className="hidden md:table-cell">
-                    Responsável
-                  </TableHead>
-                  <TableHead className="hidden lg:table-cell">
-                    Localização
-                  </TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Ações</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {ativos?.map((a) => {
-                  const catInfo = categoriaInfo(a.categoria);
-                  return (
-                    <TableRow
-                      key={a.id}
-                      className="cursor-pointer hover:bg-muted/40"
-                      onClick={() => abrirDetalhe(a.id)}
-                    >
-                      <TableCell>
-                        <div className="flex size-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                          <CategoryIcon
-                            categoria={a.categoria}
-                            iconName={catInfo?.icon}
-                            className="size-4"
-                          />
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="font-mono text-sm font-medium">
-                          {a.numeroPatrimonio}
-                        </div>
-                        {a.numeroSerie && (
-                          <div className="text-xs text-muted-foreground">
-                            {a.numeroSerie}
+          <>
+            <div className="overflow-x-auto custom-scroll">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-muted/40 hover:bg-muted/40">
+                    <TableHead className="w-[60px]"></TableHead>
+                    <TableHead>Patrimônio</TableHead>
+                    <TableHead>Categoria</TableHead>
+                    <TableHead>Marca / Modelo</TableHead>
+                    <TableHead className="hidden md:table-cell">
+                      Responsável
+                    </TableHead>
+                    <TableHead className="hidden lg:table-cell">
+                      Localização
+                    </TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="text-right">Ações</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {ativosPaginados?.map((a) => {
+                    const catInfo = categoriaInfo(a.categoria);
+                    return (
+                      <TableRow
+                        key={a.id}
+                        className="cursor-pointer hover:bg-muted/40"
+                        onClick={() => abrirDetalhe(a.id)}
+                      >
+                        <TableCell>
+                          <div className="flex size-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                            <CategoryIcon
+                              categoria={a.categoria}
+                              iconName={catInfo?.icon}
+                              className="size-4"
+                            />
                           </div>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="outline" className="font-normal">
-                          {catInfo?.labelSingular ?? getCategoriaLabel(a.categoria)}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <div className="font-medium text-sm">
-                          {a.marca ?? "—"}
-                        </div>
-                        <div className="text-xs text-muted-foreground">
-                          {a.modelo ?? ""}
-                        </div>
-                      </TableCell>
-                      <TableCell className="hidden md:table-cell text-sm">
-                        {a.responsavel ?? (
-                          <span className="text-muted-foreground">—</span>
-                        )}
-                      </TableCell>
-                      <TableCell className="hidden lg:table-cell text-sm">
-                        {a.localizacao ?? (
-                          <span className="text-muted-foreground">—</span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <StatusBadge status={a.status} />
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div
-                          className="flex items-center justify-end gap-1"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <TooltipProvider>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="size-8"
-                                  onClick={() => abrirDetalhe(a.id)}
-                                >
-                                  <Eye className="size-4" />
-                                </Button>
-                              </TooltipTrigger>
-                              <TooltipContent>Ver detalhes</TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
-                          {podeEditar && (
-                            <>
-                              <TooltipProvider>
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <Button
-                                      variant="ghost"
-                                      size="icon"
-                                      className="size-8"
-                                      onClick={() => abrirMovimentacao(a)}
-                                    >
-                                      <ArrowRightLeft className="size-4" />
-                                    </Button>
-                                  </TooltipTrigger>
-                                  <TooltipContent>Movimentar</TooltipContent>
-                                </Tooltip>
-                              </TooltipProvider>
-                              <TooltipProvider>
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <Button
-                                      variant="ghost"
-                                      size="icon"
-                                      className="size-8"
-                                      onClick={() => abrirEdicao(a)}
-                                    >
-                                      <Pencil className="size-4" />
-                                    </Button>
-                                  </TooltipTrigger>
-                                  <TooltipContent>Editar</TooltipContent>
-                                </Tooltip>
-                              </TooltipProvider>
-                            </>
+                        </TableCell>
+                        <TableCell>
+                          <div className="font-mono text-sm font-medium">
+                            {a.numeroPatrimonio}
+                          </div>
+                          {a.numeroSerie && (
+                            <div className="text-xs text-muted-foreground">
+                              {a.numeroSerie}
+                            </div>
                           )}
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          </div>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className="font-normal">
+                            {catInfo?.labelSingular ?? getCategoriaLabel(a.categoria)}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <div className="font-medium text-sm">
+                            {a.marca ?? "—"}
+                          </div>
+                          <div className="text-xs text-muted-foreground">
+                            {a.modelo ?? ""}
+                          </div>
+                        </TableCell>
+                        <TableCell className="hidden md:table-cell text-sm">
+                          {a.responsavel ?? (
+                            <span className="text-muted-foreground">—</span>
+                          )}
+                        </TableCell>
+                        <TableCell className="hidden lg:table-cell text-sm">
+                          {a.localizacao ?? (
+                            <span className="text-muted-foreground">—</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <StatusBadge status={a.status} />
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div
+                            className="flex items-center justify-end gap-1"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="size-8"
+                                    onClick={() => abrirDetalhe(a.id)}
+                                  >
+                                    <Eye className="size-4" />
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>Ver detalhes</TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                            {podeEditar && (
+                              <>
+                                <TooltipProvider>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="size-8"
+                                        onClick={() => abrirMovimentacao(a)}
+                                      >
+                                        <ArrowRightLeft className="size-4" />
+                                      </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>Movimentar</TooltipContent>
+                                  </Tooltip>
+                                </TooltipProvider>
+                                <TooltipProvider>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="size-8"
+                                        onClick={() => abrirEdicao(a)}
+                                      >
+                                        <Pencil className="size-4" />
+                                      </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>Editar</TooltipContent>
+                                  </Tooltip>
+                                </TooltipProvider>
+                                <TooltipProvider>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="size-8"
+                                        onClick={() => abrirDuplicar(a)}
+                                      >
+                                        <Copy className="size-4" />
+                                      </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>Duplicar</TooltipContent>
+                                  </Tooltip>
+                                </TooltipProvider>
+                              </>
+                            )}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
+
+            {/* Paginação */}
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-t p-3">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <span>Itens por página:</span>
+                <Select
+                  value={String(pageSize)}
+                  onValueChange={(v) => setPageSize(Number(v))}
+                >
+                  <SelectTrigger className="w-[80px] h-8">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {TAMANHOS_PAGINA.map((n) => (
+                      <SelectItem key={n} value={String(n)}>
+                        {n}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <span className="hidden sm:inline">
+                  · Mostrando {(paginaAtual - 1) * pageSize + 1}–
+                  {Math.min(paginaAtual * pageSize, totalFiltrado)} de {totalFiltrado}
+                </span>
+              </div>
+
+              <div className="flex items-center gap-1.5">
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="size-8"
+                  disabled={paginaAtual <= 1}
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                >
+                  <ChevronLeft className="size-4" />
+                </Button>
+                <span className="text-sm px-2 whitespace-nowrap">
+                  Página {paginaAtual} de {totalPaginas}
+                </span>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="size-8"
+                  disabled={paginaAtual >= totalPaginas}
+                  onClick={() => setPage((p) => Math.min(totalPaginas, p + 1))}
+                >
+                  <ChevronRight className="size-4" />
+                </Button>
+              </div>
+            </div>
+          </>
         )}
       </Card>
 
@@ -438,6 +541,7 @@ export function AssetList() {
         open={formOpen}
         onOpenChange={setFormOpen}
         ativo={editando}
+        duplicarDe={duplicando}
       />
       <AssetDetailDialog
         open={detalheOpen}
@@ -449,6 +553,7 @@ export function AssetList() {
                 setDetalheOpen(false);
                 const a = ativos?.find((x) => x.id === detalheId) ?? null;
                 setEditando(a);
+                setDuplicando(null);
                 setFormOpen(true);
               }
             : undefined

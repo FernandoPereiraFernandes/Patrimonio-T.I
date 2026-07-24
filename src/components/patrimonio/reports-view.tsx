@@ -17,9 +17,16 @@ import {
   CartesianGrid,
   PieChart,
   Pie,
-  Legend,
 } from "recharts";
 import { PieChart as PieIcon, BarChart3, MapPin, Building2 } from "lucide-react";
+
+// Paleta usada só no gráfico de Setor (cores distintas e mais suaves que a
+// paleta padrão de categoria, pra não competir visualmente com os outros gráficos)
+const CORES_SETOR = [
+  "#10b981", "#0ea5e9", "#8b5cf6", "#f59e0b", "#ef4444",
+  "#ec4899", "#14b8a6", "#84cc16", "#f97316", "#6366f1",
+  "#06b6d4", "#a855f7",
+];
 
 export function ReportsView() {
   const { data: ativos, isLoading: loadingAtivos } = useAtivos();
@@ -40,7 +47,7 @@ export function ReportsView() {
 
   const listaCategorias = categorias ?? [];
 
-  // Valor por categoria — agora percorre TODAS as categorias ativas (padrão + customizadas)
+  // Valor por categoria — percorre TODAS as categorias ativas (padrão + customizadas)
   const valorPorCategoria = listaCategorias
     .map((c) => {
       const itens = ativos.filter(
@@ -69,8 +76,13 @@ export function ReportsView() {
     setorMap.set(s, (setorMap.get(s) ?? 0) + 1);
   });
   const porSetor = Array.from(setorMap.entries())
-    .map(([name, value]) => ({ name, value }))
+    .map(([name, value], idx) => ({
+      name,
+      value,
+      cor: CORES_SETOR[idx % CORES_SETOR.length],
+    }))
     .sort((a, b) => b.value - a.value);
+  const totalSetor = porSetor.reduce((acc, s) => acc + s.value, 0);
 
   // Por localização
   const locMap = new Map<string, number>();
@@ -156,7 +168,7 @@ export function ReportsView() {
       </Card>
 
       <div className="grid gap-4 lg:grid-cols-2">
-        {/* Distribuição por setor */}
+        {/* Distribuição por setor — donut + legenda (redesenhado) */}
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-base flex items-center gap-2">
@@ -165,49 +177,81 @@ export function ReportsView() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="h-64">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={porSetor}
-                    dataKey="value"
-                    nameKey="name"
-                    cx="50%"
-                    cy="50%"
-                    outerRadius={80}
-                    label={(entry) => `${entry.name}: ${entry.value}`}
-                    labelLine={false}
-                  >
-                    {porSetor.map((_, idx) => (
-                      <Cell
-                        key={idx}
-                        fill={
-                          [
-                            "#10b981",
-                            "#0ea5e9",
-                            "#8b5cf6",
-                            "#f59e0b",
-                            "#ef4444",
-                            "#ec4899",
-                            "#14b8a6",
-                            "#84cc16",
-                          ][idx % 8]
-                        }
+            {porSetor.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-10 text-center">
+                Nenhum ativo com setor definido.
+              </p>
+            ) : (
+              <>
+                <div className="relative h-56">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={porSetor}
+                        dataKey="value"
+                        nameKey="name"
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={58}
+                        outerRadius={88}
+                        paddingAngle={2}
+                        strokeWidth={0}
+                      >
+                        {porSetor.map((entry, idx) => (
+                          <Cell key={idx} fill={entry.cor} stroke="var(--card)" strokeWidth={2} />
+                        ))}
+                      </Pie>
+                      <Tooltip
+                        contentStyle={{
+                          borderRadius: 8,
+                          border: "1px solid var(--border)",
+                          background: "var(--popover)",
+                          color: "var(--popover-foreground)",
+                          fontSize: 12,
+                        }}
+                        formatter={(value: number, name: string) => [
+                          `${value} ${value === 1 ? "item" : "itens"} (${totalSetor > 0 ? ((value / totalSetor) * 100).toFixed(0) : 0}%)`,
+                          name,
+                        ]}
                       />
-                    ))}
-                  </Pie>
-                  <Tooltip
-                    contentStyle={{
-                      borderRadius: 8,
-                      border: "1px solid var(--border)",
-                      background: "var(--popover)",
-                      color: "var(--popover-foreground)",
-                      fontSize: 12,
-                    }}
-                  />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
+                    </PieChart>
+                  </ResponsiveContainer>
+                  {/* Total no centro do donut */}
+                  <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                    <span className="text-2xl font-bold tracking-tight">
+                      {totalSetor}
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      {totalSetor === 1 ? "ativo" : "ativos"}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Legenda customizada (evita labels espremidos dentro do gráfico) */}
+                <div className="space-y-1.5 mt-3 max-h-36 overflow-y-auto custom-scroll pr-1">
+                  {porSetor.map((s) => {
+                    const pct = totalSetor > 0 ? (s.value / totalSetor) * 100 : 0;
+                    return (
+                      <div
+                        key={s.name}
+                        className="flex items-center justify-between text-sm gap-2"
+                      >
+                        <span className="flex items-center gap-2 min-w-0">
+                          <span
+                            className="size-2.5 rounded-full shrink-0"
+                            style={{ background: s.cor }}
+                          />
+                          <span className="truncate">{s.name}</span>
+                        </span>
+                        <span className="font-medium shrink-0 text-muted-foreground">
+                          {s.value} <span className="text-xs">({pct.toFixed(0)}%)</span>
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
+            )}
           </CardContent>
         </Card>
 

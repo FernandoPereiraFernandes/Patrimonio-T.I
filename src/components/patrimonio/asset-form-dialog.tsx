@@ -32,12 +32,15 @@ import { useCategorias } from "@/lib/categorias";
 import { useCreateAtivo, useUpdateAtivo } from "@/lib/queries";
 import type { Ativo, AtivoInput } from "@/lib/types";
 import { CategoryIcon } from "@/components/patrimonio/category-icon";
-import { Loader2, Save, X } from "lucide-react";
+import { Loader2, Save, X, Copy } from "lucide-react";
 
 interface AssetFormDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   ativo?: Ativo | null;
+  // Quando presente (e `ativo` ausente), o formulário abre em modo de
+  // CRIAÇÃO já pré-preenchido com os dados deste ativo (fluxo de "Duplicar").
+  duplicarDe?: Ativo | null;
 }
 
 function toDateInput(d: string | null | undefined): string {
@@ -53,9 +56,10 @@ export function AssetFormDialog({
   open,
   onOpenChange,
   ativo,
+  duplicarDe,
 }: AssetFormDialogProps) {
-  // key muda quando o dialog abre ou quando ativo muda -> força remontagem do form
-  const formKey = `${open ? "open" : "closed"}-${ativo?.id ?? "new"}`;
+  // key muda quando o dialog abre ou quando ativo/duplicarDe muda -> força remontagem do form
+  const formKey = `${open ? "open" : "closed"}-${ativo?.id ?? duplicarDe?.id ?? "new"}`;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -64,6 +68,7 @@ export function AssetFormDialog({
           <AssetFormInner
             key={formKey}
             ativo={ativo}
+            duplicarDe={ativo ? null : duplicarDe}
             onClose={() => onOpenChange(false)}
           />
         )}
@@ -94,18 +99,22 @@ const EMPTY: AtivoInput = {
 
 function AssetFormInner({
   ativo,
+  duplicarDe,
   onClose,
 }: {
   ativo?: Ativo | null;
+  duplicarDe?: Ativo | null;
   onClose: () => void;
 }) {
   const isEdit = !!ativo;
+  const isDuplicando = !isEdit && !!duplicarDe;
 
   // Inicializa state já com os valores corretos (sem useEffect)
   const initialSpecs: Record<string, string> = (() => {
-    if (!ativo?.especificacoes) return {};
+    const origem = ativo ?? duplicarDe;
+    if (!origem?.especificacoes) return {};
     try {
-      return JSON.parse(ativo.especificacoes);
+      return JSON.parse(origem.especificacoes);
     } catch {
       return {};
     }
@@ -131,13 +140,36 @@ function AssetFormInner({
         dataGarantia: toDateInput(ativo.dataGarantia),
         observacoes: ativo.observacoes ?? "",
       }
+    : duplicarDe
+    ? {
+        // Campos copiados: características do equipamento em si.
+        categoria: duplicarDe.categoria as CategoriaAtivo,
+        marca: duplicarDe.marca ?? "",
+        modelo: duplicarDe.modelo ?? "",
+        descricao: duplicarDe.descricao ?? "",
+        especificacoes: duplicarDe.especificacoes ?? "",
+        localizacao: duplicarDe.localizacao ?? "",
+        setor: duplicarDe.setor ?? "",
+        valorAquisicao: duplicarDe.valorAquisicao ?? 0,
+        fornecedor: duplicarDe.fornecedor ?? "",
+        observacoes: duplicarDe.observacoes ?? "",
+        // Campos NÃO copiados: identificam uma unidade física específica,
+        // então ficam em branco para forçar preenchimento de um novo item.
+        numeroPatrimonio: "",
+        numeroSerie: "",
+        status: "EM_ESTOQUE",
+        responsavel: "",
+        dataAquisicao: "",
+        notaFiscal: "",
+        dataGarantia: "",
+      }
     : EMPTY;
 
   const [form, setForm] = useState<AtivoInput>(initialForm);
   const [specs, setSpecs] = useState<Record<string, string>>(initialSpecs);
   const [valorStr, setValorStr] = useState(
-    ativo?.valorAquisicao
-      ? ativo.valorAquisicao.toLocaleString("pt-BR", {
+    initialForm.valorAquisicao
+      ? initialForm.valorAquisicao.toLocaleString("pt-BR", {
           minimumFractionDigits: 2,
         })
       : ""
@@ -195,7 +227,11 @@ function AssetFormInner({
         toast.success("Ativo atualizado com sucesso!");
       } else {
         await createMut.mutateAsync(payload);
-        toast.success("Ativo cadastrado com sucesso!");
+        toast.success(
+          isDuplicando
+            ? "Ativo duplicado e cadastrado com sucesso!"
+            : "Ativo cadastrado com sucesso!"
+        );
       }
       onClose();
     } catch (e) {
@@ -209,11 +245,22 @@ function AssetFormInner({
     <>
       <DialogHeader className="px-6 py-4 border-b bg-muted/30">
         <DialogTitle className="flex items-center gap-2 text-lg">
-          {isEdit ? "Editar Ativo" : "Novo Ativo de TI"}
+          {isEdit ? (
+            "Editar Ativo"
+          ) : isDuplicando ? (
+            <>
+              <Copy className="size-4 text-primary" />
+              Duplicar Ativo
+            </>
+          ) : (
+            "Novo Ativo de TI"
+          )}
         </DialogTitle>
         <DialogDescription>
           {isEdit
             ? `Alterando dados do patrimônio ${ativo?.numeroPatrimonio}`
+            : isDuplicando
+            ? `Criando um novo item a partir de ${duplicarDe?.numeroPatrimonio} (${duplicarDe?.marca} ${duplicarDe?.modelo}). Preencha o novo número de patrimônio e demais dados específicos desta unidade.`
             : "Preencha os dados para cadastrar um novo item no patrimônio de TI."}
         </DialogDescription>
       </DialogHeader>
@@ -237,7 +284,13 @@ function AssetFormInner({
                   onChange={(e) =>
                     setForm({ ...form, numeroPatrimonio: e.target.value })
                   }
+                  autoFocus={isDuplicando}
                 />
+                {isDuplicando && (
+                  <p className="text-xs text-muted-foreground">
+                    Este campo é único — informe um número novo para esta unidade.
+                  </p>
+                )}
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="numSerie">Nº de Série</Label>
@@ -507,7 +560,11 @@ function AssetFormInner({
           ) : (
             <Save className="size-4 mr-1" />
           )}
-          {isEdit ? "Salvar Alterações" : "Cadastrar Ativo"}
+          {isEdit
+            ? "Salvar Alterações"
+            : isDuplicando
+            ? "Cadastrar Cópia"
+            : "Cadastrar Ativo"}
         </Button>
       </DialogFooter>
     </>

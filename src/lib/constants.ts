@@ -176,3 +176,33 @@ export function getCategoriaColor(value: string): string {
   }
   return PALETA_FALLBACK[Math.abs(hash) % PALETA_FALLBACK.length];
 }
+
+// Extrai o ÚLTIMO grupo de dígitos de uma string (ex: de "NBK-ITBS-002"
+// extrai 2; de "TI-MON-0001" extrai 1). Retorna null se não houver nenhum
+// dígito na string.
+function extrairNumeroFinal(s: string): number | null {
+  const grupos = s.match(/\d+/g);
+  if (!grupos || grupos.length === 0) return null;
+  return parseInt(grupos[grupos.length - 1], 10);
+}
+
+// Ordenação por número de patrimônio, usando SÓ o número da sequência final
+// (ex: o "002" de "NBK-ITBS-002"), ignorando qualquer texto/prefixo no meio
+// (categoria, marca, etc). Isso garante 001, 002, 003... em ordem, mesmo que
+// os prefixos de categoria sejam diferentes e fiquem fora de ordem alfabética
+// entre si (ex: "NBK-ITBS-002" não deve vir antes de "NBK-SMS-001" só porque
+// "ITBS" < "SMS" no alfabeto — o que importa é 002 > 001).
+export function compareNumeroPatrimonio(a: string, b: string): number {
+  const na = extrairNumeroFinal(a);
+  const nb = extrairNumeroFinal(b);
+
+  if (na !== null && nb !== null && na !== nb) {
+    return na - nb;
+  }
+  if (na !== null && nb === null) return -1;
+  if (na === null && nb !== null) return 1;
+
+  // Empate no número (ou nenhum dos dois tem número): desempate alfabético,
+  // só pra manter uma ordem estável e previsível.
+  return a.localeCompare(b);
+}
